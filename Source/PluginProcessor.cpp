@@ -126,6 +126,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout NaniDistortionAudioProcessor
         juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f),
         0.0f)); // Default to 0 dB (unity gain)
 
+	// Bypass parameter
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ "bypass", 1 },
+        "Bypass",
+        false)); // Default to not bypassed
+
 
     return { params.begin(), params.end() };
 }
@@ -213,6 +219,9 @@ void NaniDistortionAudioProcessor::prepareToPlay(double sampleRate, int samplesP
     limiterEnabledParam = treeState.getRawParameterValue("limiterEnabled");
     inputGainParam = treeState.getRawParameterValue("inputGain");
     outputGainParam = treeState.getRawParameterValue("outputGain");
+
+    // Get bypass parameter
+    bypassParam = treeState.getRawParameterValue("bypass");
 
     // Prepare filter for the highest possible oversampling rate
     juce::dsp::ProcessSpec spec;
@@ -364,7 +373,45 @@ void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
 {
     juce::ScopedNoDenormals noDenormals;
 
-    // Get parameters - use load() to get the actual value from the atomic pointer
+    // Check if bypassed
+    bool shouldBypass = bypassParam->load() > 0.5f;
+
+    // Calculate input levels (before any processing)
+    for (int channel = 0; channel < buffer.getNumChannels() && channel < 2; ++channel)
+    {
+        // Apply level decay
+        inputLevels[channel] *= levelDecayRate;
+
+        // Find the peak level in this buffer
+        float currentPeak = 0.0f;
+
+        // Check each sample and find the peak
+        auto* channelData = buffer.getReadPointer(channel);
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            float sample = std::abs(channelData[i]);
+            if (sample > currentPeak)
+                currentPeak = sample;
+        }
+
+        // Update the level if the new peak is higher
+        if (currentPeak > inputLevels[channel])
+            inputLevels[channel] = currentPeak;
+    }
+
+    // If bypassed, skip all processing and just update output levels
+    if (shouldBypass)
+    {
+        // When bypassed, output levels are the same as input levels
+        for (int channel = 0; channel < buffer.getNumChannels() && channel < 2; ++channel)
+        {
+            outputLevels[channel] = inputLevels[channel];
+        }
+
+        return;
+    }
+
+    // Get parameters
     const int oversamplingIndex = static_cast<int>(treeState.getRawParameterValue("oversamplingFactor")->load());
     const float drive = treeState.getRawParameterValue("drive")->load();
     const float bitDepth = treeState.getRawParameterValue("bitdepth")->load();
@@ -376,27 +423,13 @@ void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
     const auto filterRouting = static_cast<FilterRouting>(static_cast<int>(treeState.getRawParameterValue("filterRouting")->load()));
     const auto distortionType = static_cast<DistortionType>(static_cast<int>(treeState.getRawParameterValue("distortionType")->load()));
 
-    // Get gain parameters - use the pointers we stored in prepareToPlay
+    // Get gain parameters
     const float inputGain = juce::Decibels::decibelsToGain(inputGainParam->load());
     const float outputGain = juce::Decibels::decibelsToGain(outputGainParam->load());
 
     // Create dry buffer for mix
     juce::AudioBuffer<float> dryBuffer;
     if (mix < 1.0f) dryBuffer.makeCopyOf(buffer);
-
-    // Calculate input levels (before input gain)
-    for (int channel = 0; channel < buffer.getNumChannels() && channel < 2; ++channel)
-    {
-        // Apply level decay
-        inputLevels[channel] *= levelDecayRate;
-
-        // Find the peak level in this buffer
-        float currentPeak = buffer.getMagnitude(channel, 0, buffer.getNumSamples());
-
-        // Update the level if the new peak is higher
-        if (currentPeak > inputLevels[channel])
-            inputLevels[channel] = currentPeak;
-    }
 
     // Apply input gain
     buffer.applyGain(inputGain);

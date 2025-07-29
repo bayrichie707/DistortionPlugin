@@ -121,5 +121,9 @@ private:
     std::array<float, 2> outputLevels = { 0.0f, 0.0f }; // For stereo (left/right)
     float levelDecayRate = 0.8f;                   // How quickly the meters fall
 
+    // Bypass parameter
+    std::atomic<float>* bypassParam = nullptr;
+    bool isBypassed = false;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessor)
 };

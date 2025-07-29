@@ -107,9 +107,13 @@ private:
 
     juce::Label inputMeterLabel;
     juce::Label outputMeterLabel;
-
-	// 
+     
+	// Reset Clip Button
     juce::TextButton resetClipButton;
+
+    // Bypass button
+    juce::ToggleButton bypassButton;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
 
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessorEditor)

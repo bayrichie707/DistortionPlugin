@@ -206,6 +206,13 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
         outputLevelMeterR.resetClipping();
         };
 
+    // Bypass button
+    addAndMakeVisible(bypassButton);
+    bypassButton.setButtonText("Bypass");
+    bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::red);
+    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        processor.getValueTreeState(), "bypass", bypassButton);
+
 }
 
 NaniDistortionAudioProcessorEditor::~NaniDistortionAudioProcessorEditor() 
@@ -222,6 +229,9 @@ void NaniDistortionAudioProcessorEditor::paint(juce::Graphics& g)
 
     auto bounds = getLocalBounds();
     auto titleArea = bounds.removeFromTop(40);
+    // Remove space for bypass button from title area
+    titleArea.removeFromLeft(100);
+
     g.drawFittedText("Nani Distortion", titleArea, juce::Justification::centred, 1);
 
     // Draw separator lines
@@ -254,6 +264,11 @@ void NaniDistortionAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds();
     bounds.removeFromTop(50); // Space for title
+
+    // Position the bypass button in the top left
+    auto topArea = bounds.removeFromTop(50); // Space for title and bypass button
+    auto bypassArea = topArea.removeFromLeft(100).reduced(10);
+    bypassButton.setBounds(bypassArea);
 
     // Reserve space for meters on left and right
     const int meterWidth = 20;
