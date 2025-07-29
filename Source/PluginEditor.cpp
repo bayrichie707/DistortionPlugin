@@ -213,6 +213,18 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processor.getValueTreeState(), "bypass", bypassButton);
 
+    // Stereo width control
+    addAndMakeVisible(stereoWidthSlider);
+    stereoWidthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    stereoWidthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    stereoWidthAttachment = std::make_unique<SliderAttachment>(
+        processor.getValueTreeState(), "stereoWidth", stereoWidthSlider);
+
+    addAndMakeVisible(stereoWidthLabel);
+    stereoWidthLabel.setText("Stereo Width", juce::dontSendNotification);
+    stereoWidthLabel.setJustificationType(juce::Justification::centred);
+    stereoWidthLabel.attachToComponent(&stereoWidthSlider, false);
+
 }
 
 NaniDistortionAudioProcessorEditor::~NaniDistortionAudioProcessorEditor() 
@@ -229,9 +241,9 @@ void NaniDistortionAudioProcessorEditor::paint(juce::Graphics& g)
 
     auto bounds = getLocalBounds();
     auto titleArea = bounds.removeFromTop(40);
-    // Remove space for bypass button from title area
+    // Remove space for bypass button and stereo width control from title area
     titleArea.removeFromLeft(100);
-
+    titleArea.removeFromRight(100);
     g.drawFittedText("Nani Distortion", titleArea, juce::Justification::centred, 1);
 
     // Draw separator lines
@@ -265,10 +277,16 @@ void NaniDistortionAudioProcessorEditor::resized()
     auto bounds = getLocalBounds();
     bounds.removeFromTop(50); // Space for title
 
+    // Top area for title, bypass button, and stereo width control
+    auto topArea = bounds.removeFromTop(80); // Increased height for controls
+
     // Position the bypass button in the top left
-    auto topArea = bounds.removeFromTop(50); // Space for title and bypass button
     auto bypassArea = topArea.removeFromLeft(100).reduced(10);
     bypassButton.setBounds(bypassArea);
+
+    // Position the stereo width control in the top right
+    auto stereoWidthArea = topArea.removeFromRight(100);
+    stereoWidthSlider.setBounds(stereoWidthArea.reduced(10));
 
     // Reserve space for meters on left and right
     const int meterWidth = 20;

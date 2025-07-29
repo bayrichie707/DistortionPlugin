@@ -125,5 +125,11 @@ private:
     std::atomic<float>* bypassParam = nullptr;
     bool isBypassed = false;
 
+    // Stereo width parameter
+    std::atomic<float>* stereoWidthParam = nullptr;
+
+    // Stereo width processing
+    void applyStereoWidth(juce::AudioBuffer<float>& buffer, float width);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessor)
 };

@@ -132,6 +132,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout NaniDistortionAudioProcessor
         "Bypass",
         false)); // Default to not bypassed
 
+	// Stereo Width parameter
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ "stereoWidth", 1 },
+        "Stereo Width",
+        juce::NormalisableRange<float>(0.0f, 2.0f, 0.01f),
+        1.0f)); // Default to 1.0 (normal stereo)
+
 
     return { params.begin(), params.end() };
 }
@@ -222,6 +229,9 @@ void NaniDistortionAudioProcessor::prepareToPlay(double sampleRate, int samplesP
 
     // Get bypass parameter
     bypassParam = treeState.getRawParameterValue("bypass");
+
+    // Get stereo width parameter
+    stereoWidthParam = treeState.getRawParameterValue("stereoWidth");
 
     // Prepare filter for the highest possible oversampling rate
     juce::dsp::ProcessSpec spec;
@@ -427,12 +437,21 @@ void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
     const float inputGain = juce::Decibels::decibelsToGain(inputGainParam->load());
     const float outputGain = juce::Decibels::decibelsToGain(outputGainParam->load());
 
+    // Get stereo width parameter
+    const float stereoWidth = stereoWidthParam->load();
+
     // Create dry buffer for mix
     juce::AudioBuffer<float> dryBuffer;
     if (mix < 1.0f) dryBuffer.makeCopyOf(buffer);
 
     // Apply input gain
     buffer.applyGain(inputGain);
+
+    // Apply stereo width before processing (if stereo)
+    if (buffer.getNumChannels() > 1 && stereoWidth != 1.0f)
+    {
+        applyStereoWidth(buffer, stereoWidth);
+    }
 
     // Process with or without oversampling
     if (oversamplingIndex == 0 || oversamplers.size() <= oversamplingIndex || !oversamplers[oversamplingIndex]) {
@@ -804,6 +823,33 @@ float NaniDistortionAudioProcessor::getOutputLevel(int channel) const
     if (channel >= 0 && channel < 2)
         return outputLevels[channel];
     return 0.0f;
+}
+
+// Apply stereo width to the audio buffer
+void NaniDistortionAudioProcessor::applyStereoWidth(juce::AudioBuffer<float>& buffer, float width)
+{
+    // Only process if we have a stereo buffer
+    if (buffer.getNumChannels() < 2)
+        return;
+
+    // Get pointers to the left and right channels
+    float* leftChannel = buffer.getWritePointer(0);
+    float* rightChannel = buffer.getWritePointer(1);
+
+    // Process each sample
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+    {
+        // Convert to mid/side
+        float mid = (leftChannel[i] + rightChannel[i]) * 0.5f;
+        float side = (rightChannel[i] - leftChannel[i]) * 0.5f;
+
+        // Apply width to the side signal
+        side *= width;
+
+        // Convert back to left/right
+        leftChannel[i] = mid - side;
+        rightChannel[i] = mid + side;
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

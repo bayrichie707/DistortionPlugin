@@ -115,6 +115,11 @@ private:
     juce::ToggleButton bypassButton;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
 
+    // Stereo width control
+    juce::Slider stereoWidthSlider;
+    juce::Label stereoWidthLabel;
+    std::unique_ptr<SliderAttachment> stereoWidthAttachment;
+
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessorEditor)
 };
