@@ -5,6 +5,7 @@
 // It is correctly namespaced to the class.
 juce::AudioProcessorValueTreeState::ParameterLayout NaniDistortionAudioProcessor::createParameterLayout()
 {
+
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
@@ -87,6 +88,44 @@ juce::AudioProcessorValueTreeState::ParameterLayout NaniDistortionAudioProcessor
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID{ "filterRouting", 1 }, "Filter Routing", filterRoutingChoices, 1)); // Default to Post
 
+	// <<< ADD THE NEW OVERSAMPLING PARAMETERS
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{ "oversamplingFactor", 1 },
+        "Oversampling",
+        juce::StringArray("Off", "2x", "4x", "8x", "16x"),
+        1)); // Default to 2x
+
+	// <<< ADD THE NEW LIMITER PARAMETERS
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ "limiterThreshold", 1 },
+        "Limiter Threshold",
+        juce::NormalisableRange<float>(-30.0f, 0.0f, 0.1f),
+        -0.5f)); // Default to -0.5 dB
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ "limiterRelease", 1 },
+        "Limiter Release",
+        juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f),
+        100.0f)); // Default to 100 ms
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{ "limiterEnabled", 1 },
+        "Limiter Enabled",
+        true)); // Default to enabled
+
+	// <<< ADD THE NEW INPUT AND OUTPUT GAIN PARAMETERS
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ "inputGain", 1 },
+        "Input Gain",
+        juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f),
+        0.0f)); // Default to 0 dB (unity gain)
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{ "outputGain", 1 },
+        "Output Gain",
+        juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f),
+        0.0f)); // Default to 0 dB (unity gain)
+
 
     return { params.begin(), params.end() };
 }
@@ -114,45 +153,94 @@ void NaniDistortionAudioProcessor::setCurrentProgram(int index) {}
 const juce::String NaniDistortionAudioProcessor::getProgramName(int index) { return {}; }
 void NaniDistortionAudioProcessor::changeProgramName(int index, const juce::String& newName) {}
 
+
 juce::AudioProcessorValueTreeState& NaniDistortionAudioProcessor::getValueTreeState()
 {
     return treeState;
 }
 
-void NaniDistortionAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) 
+void NaniDistortionAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
-    // The oversampling factor. We'll hardcode 4x.
-    int factor = 4;
+    // Create all possible oversampling objects
+    oversamplers.clear();
 
-    // Create a new instance of the Oversampling object on the heap.
-    oversampling = std::make_unique<juce::dsp::Oversampling<float>>(
+    // No oversampling (1x)
+    oversamplers.push_back(nullptr);
+
+    // 2x oversampling
+    oversamplers.push_back(std::make_unique<juce::dsp::Oversampling<float>>(
         getTotalNumOutputChannels(),
-        factor,
+        1, // 2^1 = 2x
         juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
-        true // Use high-quality (polyphase) FIR filters
-    );
+        true
+    ));
 
-    // This is the correct initialization method for this class.
-    oversampling->initProcessing(samplesPerBlock);
-    
-    // <<< PREPARE THE FILTER
-    // We need a separate ProcessSpec for the oversampled signal
+    // 4x oversampling
+    oversamplers.push_back(std::make_unique<juce::dsp::Oversampling<float>>(
+        getTotalNumOutputChannels(),
+        2, // 2^2 = 4x
+        juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+        true
+    ));
+
+    // 8x oversampling
+    oversamplers.push_back(std::make_unique<juce::dsp::Oversampling<float>>(
+        getTotalNumOutputChannels(),
+        3, // 2^3 = 8x
+        juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+        true
+    ));
+
+    // 16x oversampling
+    oversamplers.push_back(std::make_unique<juce::dsp::Oversampling<float>>(
+        getTotalNumOutputChannels(),
+        4, // 2^4 = 16x
+        juce::dsp::Oversampling<float>::filterHalfBandFIREquiripple,
+        true
+    ));
+
+    // Initialize all oversamplers
+    for (auto i = 1; i < oversamplers.size(); ++i) {
+        if (oversamplers[i]) {
+            oversamplers[i]->initProcessing(samplesPerBlock);
+            oversamplers[i]->reset();
+        }
+    }
+
+    // Get parameter pointers - this is the correct way to get atomic parameters
+    limiterThresholdParam = treeState.getRawParameterValue("limiterThreshold");
+    limiterReleaseParam = treeState.getRawParameterValue("limiterRelease");
+    limiterEnabledParam = treeState.getRawParameterValue("limiterEnabled");
+    inputGainParam = treeState.getRawParameterValue("inputGain");
+    outputGainParam = treeState.getRawParameterValue("outputGain");
+
+    // Prepare filter for the highest possible oversampling rate
     juce::dsp::ProcessSpec spec;
-    spec.sampleRate = sampleRate * factor; // Use the oversampled rate!
-    spec.maximumBlockSize = samplesPerBlock * factor; // Use the oversampled block size!
+    spec.sampleRate = sampleRate * 16; // Maximum oversampling
+    spec.maximumBlockSize = samplesPerBlock * 16;
     spec.numChannels = getTotalNumOutputChannels();
-    
+
     filter.prepare(spec);
-    
-    
-    // It's good practice to reset it to clear any old state.
     filter.reset();
-    oversampling->reset();
+
+    // Prepare the limiter
+    juce::dsp::ProcessSpec limiterSpec;
+    limiterSpec.sampleRate = sampleRate;
+    limiterSpec.maximumBlockSize = samplesPerBlock;
+    limiterSpec.numChannels = getTotalNumOutputChannels();
+
+    limiter.prepare(limiterSpec);
+    limiter.reset();
 }
 
 void NaniDistortionAudioProcessor::releaseResources() 
 {
-    oversampling.reset();
+    for (auto& oversampler : oversamplers) {
+        if (oversampler) {
+            oversampler->reset();
+        }
+    }
+    oversamplers.clear();
     filter.reset();
 }
 
@@ -272,57 +360,138 @@ void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
 */
 // Source/Plugin-processor.cpp
 
-void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
-    if (!oversampling) return;
 
-    // 1. GET ALL PARAMETERS
+    // Get parameters - use load() to get the actual value from the atomic pointer
+    const int oversamplingIndex = static_cast<int>(treeState.getRawParameterValue("oversamplingFactor")->load());
     const float drive = treeState.getRawParameterValue("drive")->load();
     const float bitDepth = treeState.getRawParameterValue("bitdepth")->load();
     const float sampleRateReduction = treeState.getRawParameterValue("samplerate")->load();
     const float mix = treeState.getRawParameterValue("mix")->load();
-
-    // Get filter parameters, casting choices to our enums for safety
     const float cutoff = treeState.getRawParameterValue("filterCutoff")->load();
     const float resonance = treeState.getRawParameterValue("filterResonance")->load();
-    const auto filterType = static_cast<FilterType>(treeState.getRawParameterValue("filterType")->load());
-    const auto filterRouting = static_cast<FilterRouting>(treeState.getRawParameterValue("filterRouting")->load());
-    // <<< GET THE NEW DISTORTION TYPE PARAMETER
-    const auto distortionType = static_cast<DistortionType>(treeState.getRawParameterValue("distortionType")->load());
-    
-    // 2. PREPARE DRY BUFFER AND DSP BLOCK (same as before)
+    const auto filterType = static_cast<FilterType>(static_cast<int>(treeState.getRawParameterValue("filterType")->load()));
+    const auto filterRouting = static_cast<FilterRouting>(static_cast<int>(treeState.getRawParameterValue("filterRouting")->load()));
+    const auto distortionType = static_cast<DistortionType>(static_cast<int>(treeState.getRawParameterValue("distortionType")->load()));
+
+    // Get gain parameters - use the pointers we stored in prepareToPlay
+    const float inputGain = juce::Decibels::decibelsToGain(inputGainParam->load());
+    const float outputGain = juce::Decibels::decibelsToGain(outputGainParam->load());
+
+    // Create dry buffer for mix
     juce::AudioBuffer<float> dryBuffer;
     if (mix < 1.0f) dryBuffer.makeCopyOf(buffer);
-    juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::AudioBlock<float> oversampledBlock = oversampling->processSamplesUp(block);
 
-    // 3. UPDATE FILTER SETTINGS
-    // This must be done BEFORE the processing loop.
-    switch (filterType)
+    // Calculate input levels (before input gain)
+    for (int channel = 0; channel < buffer.getNumChannels() && channel < 2; ++channel)
     {
-        case LowPass:  filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);  break;
-        case HighPass: filter.setType(juce::dsp::StateVariableTPTFilterType::highpass); break;
-        case BandPass: filter.setType(juce::dsp::StateVariableTPTFilterType::bandpass); break;
+        // Apply level decay
+        inputLevels[channel] *= levelDecayRate;
+
+        // Find the peak level in this buffer
+        float currentPeak = buffer.getMagnitude(channel, 0, buffer.getNumSamples());
+
+        // Update the level if the new peak is higher
+        if (currentPeak > inputLevels[channel])
+            inputLevels[channel] = currentPeak;
+    }
+
+    // Apply input gain
+    buffer.applyGain(inputGain);
+
+    // Process with or without oversampling
+    if (oversamplingIndex == 0 || oversamplers.size() <= oversamplingIndex || !oversamplers[oversamplingIndex]) {
+        // No oversampling - process directly
+        processAudio(buffer, drive, bitDepth, sampleRateReduction,
+            filterType, filterRouting, cutoff, resonance, distortionType);
+    }
+    else {
+        // With oversampling
+        juce::dsp::AudioBlock<float> block(buffer);
+        auto& oversampler = *oversamplers[oversamplingIndex];
+
+        // Upsample
+        auto oversampledBlock = oversampler.processSamplesUp(block);
+
+        // Process the oversampled audio
+        processOversampledBlock(oversampledBlock, drive, bitDepth, sampleRateReduction,
+            filterType, filterRouting, cutoff, resonance, distortionType);
+
+        // Downsample
+        oversampler.processSamplesDown(block);
+    }
+
+    // Apply mix
+    applyMix(buffer, dryBuffer, mix);
+
+    // Apply output gain
+    buffer.applyGain(outputGain);
+
+    // Apply limiter (if enabled)
+    if (limiterEnabledParam->load() > 0.5f)
+    {
+        limiter.setThreshold(limiterThresholdParam->load());
+        limiter.setRelease(limiterReleaseParam->load() / 1000.0f);
+
+        juce::dsp::AudioBlock<float> block(buffer);
+        juce::dsp::ProcessContextReplacing<float> context(block);
+        limiter.process(context);
+    }
+
+    // Calculate output levels (after all processing)
+    for (int channel = 0; channel < buffer.getNumChannels() && channel < 2; ++channel)
+    {
+        // Apply level decay
+        outputLevels[channel] *= levelDecayRate;
+
+        // Find the peak level in this buffer
+        float currentPeak = 0.0f;
+
+        // Check each sample for clipping and find the peak
+        auto* channelData = buffer.getReadPointer(channel);
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+        {
+            float sample = std::abs(channelData[i]);
+            if (sample > currentPeak)
+                currentPeak = sample;
+        }
+
+        // Update the level if the new peak is higher
+        if (currentPeak > outputLevels[channel])
+            outputLevels[channel] = currentPeak;
+    }
+}
+
+// Helper method to process audio without oversampling
+void NaniDistortionAudioProcessor::processAudio(juce::AudioBuffer<float>& buffer,
+    float drive, float bitDepth, float sampleRateReduction,
+    FilterType filterType, FilterRouting filterRouting,
+    float cutoff, float resonance, DistortionType distortionType)
+{
+    // Update filter settings
+    switch (filterType) {
+    case LowPass:  filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);  break;
+    case HighPass: filter.setType(juce::dsp::StateVariableTPTFilterType::highpass); break;
+    case BandPass: filter.setType(juce::dsp::StateVariableTPTFilterType::bandpass); break;
     }
     filter.setCutoffFrequency(cutoff);
     filter.setResonance(resonance);
 
-    // Context for processing the oversampled block
-    juce::dsp::ProcessContextReplacing<float> oversampledContext(oversampledBlock);
+    // Create context for filter
+    juce::dsp::AudioBlock<float> block(buffer);
+    juce::dsp::ProcessContextReplacing<float> context(block);
 
-    // 4. APPLY PRE-DISTORTION FILTER (if selected)
-    if (filterRouting == FilterRouting::Pre)
-    {
-        filter.process(oversampledContext);
+    // Apply pre-distortion filter if needed
+    if (filterRouting == FilterRouting::Pre) {
+        filter.process(context);
     }
-    
-    // 5. APPLY DISTORTION (your existing logic)
-    for (int channel = 0; channel < oversampledBlock.getNumChannels(); ++channel)
-    {
-        auto* channelData = oversampledBlock.getChannelPointer(channel);
-        for (int sample = 0; sample < oversampledBlock.getNumSamples(); ++sample)
-        {
+
+    // Apply distortion
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel) {
+        auto* channelData = buffer.getWritePointer(channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
             float wetSample = channelData[sample];
             wetSample = bitCrush(wetSample, (int)bitDepth);
             float downsampleFactor = 1.0f + (sampleRateReduction * 15.0f);
@@ -331,36 +500,75 @@ void NaniDistortionAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer
             channelData[sample] = wetSample;
         }
     }
-    
-    // 6. APPLY POST-DISTORTION FILTER (if selected)
-    if (filterRouting == FilterRouting::Post)
-    {
-        filter.process(oversampledContext);
+
+    // Apply post-distortion filter if needed
+    if (filterRouting == FilterRouting::Post) {
+        filter.process(context);
+    }
+}
+
+// Helper method to process oversampled audio block
+void NaniDistortionAudioProcessor::processOversampledBlock(juce::dsp::AudioBlock<float>& oversampledBlock,
+    float drive, float bitDepth, float sampleRateReduction,
+    FilterType filterType, FilterRouting filterRouting,
+    float cutoff, float resonance, DistortionType distortionType)
+{
+    // Update filter settings
+    switch (filterType) {
+    case LowPass:  filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);  break;
+    case HighPass: filter.setType(juce::dsp::StateVariableTPTFilterType::highpass); break;
+    case BandPass: filter.setType(juce::dsp::StateVariableTPTFilterType::bandpass); break;
+    }
+    filter.setCutoffFrequency(cutoff);
+    filter.setResonance(resonance);
+
+    // Create context for filter
+    juce::dsp::ProcessContextReplacing<float> context(oversampledBlock);
+
+    // Apply pre-distortion filter if needed
+    if (filterRouting == FilterRouting::Pre) {
+        filter.process(context);
     }
 
-    // 7. DOWNSAMPLE AND MIX (same as before)
-    oversampling->processSamplesDown(block);
-    
-    // At this point, 'buffer' contains the 100% wet signal.
-    // 'dryBuffer' contains the 100% dry signal.
-    // 8. APPLY THE CORRECT DRY/WET MIX
-    if (mix == 0.0f)
-    {
-        // If mix is 0%, just copy the dry signal back.
+    // Apply distortion
+    for (int channel = 0; channel < oversampledBlock.getNumChannels(); ++channel) {
+        auto* channelData = oversampledBlock.getChannelPointer(channel);
+        for (int sample = 0; sample < oversampledBlock.getNumSamples(); ++sample) {
+            float wetSample = channelData[sample];
+            wetSample = bitCrush(wetSample, (int)bitDepth);
+            float downsampleFactor = 1.0f + (sampleRateReduction * 15.0f);
+            wetSample = downsample(wetSample, downsampleFactor);
+            wetSample = waveshaper(wetSample, drive, distortionType);
+            channelData[sample] = wetSample;
+        }
+    }
+
+    // Apply post-distortion filter if needed
+    if (filterRouting == FilterRouting::Post) {
+        filter.process(context);
+    }
+}
+
+// Helper method to apply mix
+void NaniDistortionAudioProcessor::applyMix(juce::AudioBuffer<float>& buffer,
+    const juce::AudioBuffer<float>& dryBuffer,
+    float mix)
+{
+    if (mix == 0.0f) {
+        // If mix is 0%, just copy the dry signal back
         buffer.copyFrom(0, 0, dryBuffer, 0, 0, buffer.getNumSamples());
         if (buffer.getNumChannels() > 1)
             buffer.copyFrom(1, 0, dryBuffer, 1, 0, buffer.getNumSamples());
     }
-    else if (mix < 1.0f)
-    {
-        // For partial mix, apply gain to the wet signal...
+    else if (mix < 1.0f) {
+        // For partial mix, apply gain to the wet signal
         buffer.applyGain(mix);
-        // ...and add the dry signal with its gain.
+        // And add the dry signal with its gain
         buffer.addFrom(0, 0, dryBuffer, 0, 0, buffer.getNumSamples(), (1.0f - mix));
         if (buffer.getNumChannels() > 1)
             buffer.addFrom(1, 0, dryBuffer, 1, 0, buffer.getNumSamples(), (1.0f - mix));
     }
-    // If mix is 1.0f, we do nothing, because the buffer already contains the 100% wet signal.      
+    // If mix is 1.0f, we do nothing
 }
 
 float NaniDistortionAudioProcessor::bitCrush(float sample, int bits)
@@ -432,6 +640,103 @@ float NaniDistortionAudioProcessor::waveshaper(float sample, float drive, Distor
     }
 }
 
+// Helper methods for preset management
+juce::File NaniDistortionAudioProcessor::getPresetsDirectory()
+{
+    // Get the user's application data directory
+    juce::File appDataDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
+
+    // Create a directory for your plugin's presets
+    juce::File presetsDir = appDataDir.getChildFile("NaniDistortion/Presets");
+
+    // Make sure the directory exists
+    if (!presetsDir.exists())
+        presetsDir.createDirectory();
+
+    return presetsDir;
+}
+
+void NaniDistortionAudioProcessor::savePreset(const juce::String& name)
+{
+    // Get the presets directory
+    juce::File presetsDir = getPresetsDirectory();
+
+    // Create a file for the preset
+    juce::File presetFile = presetsDir.getChildFile(name + ".preset");
+
+    // Create an XML element to store the preset data
+    auto presetXml = treeState.state.createXml();
+
+    // Save the XML to the file
+    if (presetXml->writeTo(presetFile))
+    {
+        currentPresetName = name;
+    }
+}
+
+void NaniDistortionAudioProcessor::loadPreset(const juce::String& name)
+{
+    // Get the presets directory
+    juce::File presetsDir = getPresetsDirectory();
+
+    // Get the preset file
+    juce::File presetFile = presetsDir.getChildFile(name + ".preset");
+
+    // Check if the file exists
+    if (presetFile.exists())
+    {
+        // Load the XML from the file
+        std::unique_ptr<juce::XmlElement> presetXml = juce::XmlDocument::parse(presetFile);
+
+        // Check if the XML is valid
+        if (presetXml.get() != nullptr)
+        {
+            // Load the preset data into the value tree state
+            treeState.replaceState(juce::ValueTree::fromXml(*presetXml));
+            currentPresetName = name;
+        }
+    }
+}
+
+void NaniDistortionAudioProcessor::deletePreset(const juce::String& name)
+{
+    // Get the presets directory
+    juce::File presetsDir = getPresetsDirectory();
+
+    // Get the preset file
+    juce::File presetFile = presetsDir.getChildFile(name + ".preset");
+
+    // Delete the file if it exists
+    if (presetFile.exists())
+    {
+        presetFile.deleteFile();
+
+        // If the deleted preset was the current one, clear the current preset name
+        if (currentPresetName == name)
+            currentPresetName = "";
+    }
+}
+
+juce::StringArray NaniDistortionAudioProcessor::getPresetList()
+{
+    // Get the presets directory
+    juce::File presetsDir = getPresetsDirectory();
+
+    // Create a string array to store the preset names
+    juce::StringArray presetList;
+
+    // Get all files in the directory with the .preset extension
+    juce::Array<juce::File> presetFiles = presetsDir.findChildFiles(juce::File::findFiles, false, "*.preset");
+
+    // Add each preset name to the list (without the extension)
+    for (auto& file : presetFiles)
+    {
+        presetList.add(file.getFileNameWithoutExtension());
+    }
+
+    return presetList;
+}
+
 bool NaniDistortionAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* NaniDistortionAudioProcessor::createEditor()
 {
@@ -451,6 +756,21 @@ void NaniDistortionAudioProcessor::setStateInformation(const void* data, int siz
     if (xmlState.get() != nullptr)
         if (xmlState->hasTagName(treeState.state.getType()))
             treeState.replaceState(juce::ValueTree::fromXml(*xmlState));
+}
+
+// Add these implementations to your PluginProcessor.cpp file:
+float NaniDistortionAudioProcessor::getInputLevel(int channel) const
+{
+    if (channel >= 0 && channel < 2)
+        return inputLevels[channel];
+    return 0.0f;
+}
+
+float NaniDistortionAudioProcessor::getOutputLevel(int channel) const
+{
+    if (channel >= 0 && channel < 2)
+        return outputLevels[channel];
+    return 0.0f;
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
