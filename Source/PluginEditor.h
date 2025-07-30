@@ -3,6 +3,7 @@
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "LevelMeter.h"
+#include "CustomSlider.h"
 
 // A handy alias for the long attachment class names to keep code clean
 using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -20,15 +21,39 @@ public:
     // Add this declaration for the timer callback
     void timerCallback() override;
 
+	// Method to update all slider displays
+    void updateAllSliderDisplays();
+
 
 private:
     NaniDistortionAudioProcessor& processor;
 
     // Distortion Components
-    juce::Slider driveSlider;
-    juce::Slider bitDepthSlider;
-    juce::Slider sampleRateSlider;
-    juce::Slider mixSlider;
+    CustomSlider driveSlider;
+    CustomSlider bitDepthSlider;
+    CustomSlider sampleRateSlider;
+    CustomSlider mixSlider;
+
+    // Filter Components
+    CustomSlider filterCutoffSlider;
+    CustomSlider filterResonanceSlider;
+
+    // Gain controls
+    CustomSlider inputGainSlider;
+    CustomSlider outputGainSlider;
+
+    // Limiter components
+    CustomSlider limiterThresholdSlider;
+    CustomSlider limiterReleaseSlider;
+
+    // Stereo width control
+    CustomSlider stereoWidthSlider;
+
+    //// Distortion Components
+    //juce::Slider driveSlider;
+    //juce::Slider bitDepthSlider;
+    //juce::Slider sampleRateSlider;
+    //juce::Slider mixSlider;
 
     juce::Label driveLabel;
     juce::Label bitDepthLabel;
@@ -46,8 +71,8 @@ private:
     std::unique_ptr<ComboBoxAttachment> distortionTypeAttachment;
 
     // Filter Components
-    juce::Slider filterCutoffSlider;
-    juce::Slider filterResonanceSlider;
+    //juce::Slider filterCutoffSlider;
+    //juce::Slider filterResonanceSlider;
     juce::ComboBox filterTypeComboBox;
     juce::ComboBox filterRoutingComboBox;
 
@@ -78,8 +103,8 @@ private:
     void showDeletePresetConfirmation();
 
     // Limiter components
-    juce::Slider limiterThresholdSlider;
-    juce::Slider limiterReleaseSlider;
+    //juce::Slider limiterThresholdSlider;
+    //juce::Slider limiterReleaseSlider;
     juce::ToggleButton limiterEnabledButton;
 
     juce::Label limiterThresholdLabel;
@@ -90,8 +115,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> limiterEnabledAttachment;
 
     // Gain controls
-    juce::Slider inputGainSlider;
-    juce::Slider outputGainSlider;
+    //juce::Slider inputGainSlider;
+    //juce::Slider outputGainSlider;
 
     juce::Label inputGainLabel;
     juce::Label outputGainLabel;
@@ -116,7 +141,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
 
     // Stereo width control
-    juce::Slider stereoWidthSlider;
+    //juce::Slider stereoWidthSlider;
     juce::Label stereoWidthLabel;
     std::unique_ptr<SliderAttachment> stereoWidthAttachment;
 

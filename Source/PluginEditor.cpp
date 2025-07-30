@@ -225,6 +225,42 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     stereoWidthLabel.setJustificationType(juce::Justification::centred);
     stereoWidthLabel.attachToComponent(&stereoWidthSlider, false);
 
+    // Input and Output Gain
+    inputGainSlider.setValueDisplayMode(CustomSlider::Decibels);
+    outputGainSlider.setValueDisplayMode(CustomSlider::Decibels);
+
+    // Drive
+    driveSlider.setValueDisplayMode(CustomSlider::Times);
+
+    // Bit Depth
+    bitDepthSlider.setValueDisplayMode(CustomSlider::Samples);
+
+    // Sample Rate Reduction
+    sampleRateSlider.setValueDisplayMode(CustomSlider::Percentage);
+
+    // Mix
+    mixSlider.setValueDisplayMode(CustomSlider::Percentage);
+
+    // Filter Cutoff
+    filterCutoffSlider.setValueDisplayMode(CustomSlider::Hertz);
+
+    // Filter Resonance
+    filterResonanceSlider.setValueDisplayMode(CustomSlider::Ratio);
+
+    // Limiter Threshold
+    limiterThresholdSlider.setValueDisplayMode(CustomSlider::Decibels);
+
+    // Limiter Release
+    limiterReleaseSlider.setValueDisplayMode(CustomSlider::Milliseconds);
+
+    // Stereo Width
+    stereoWidthSlider.setValueDisplayMode(CustomSlider::Ratio);
+
+    // At the end of your constructor
+    updateAllSliderDisplays();
+
+    // Adjust window size to accommodate meters
+    setSize(600, 760); 
 }
 
 NaniDistortionAudioProcessorEditor::~NaniDistortionAudioProcessorEditor() 
@@ -236,68 +272,82 @@ void NaniDistortionAudioProcessorEditor::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour::fromRGB(35, 35, 39));
 
+    // Draw title
     g.setColour(juce::Colours::white);
     g.setFont(20.0f);
 
     auto bounds = getLocalBounds();
-    auto titleArea = bounds.removeFromTop(40);
-    // Remove space for bypass button and stereo width control from title area
-    titleArea.removeFromLeft(100);
-    titleArea.removeFromRight(100);
+    auto headerSection = bounds.removeFromTop(70); // Match the increased height
+    headerSection.removeFromLeft(120); // Space for bypass button
+    auto titleArea = headerSection.removeFromLeft(headerSection.getWidth() - 140); // Adjusted width
     g.drawFittedText("Nani Distortion", titleArea, juce::Justification::centred, 1);
 
-    // Draw separator lines
+    // Rest of your paint code...
+    // Draw section dividers and titles
     g.setColour(juce::Colours::darkgrey);
 
-    // First separator (after filter knobs)
-    auto tempBounds = bounds;
-    tempBounds.removeFromTop(150);
-    g.fillRect(tempBounds.removeFromTop(2).toFloat().reduced(20, 0));
+    // Helper function to draw a section divider with title
+    auto drawSectionDivider = [&](int yPosition, const juce::String& title) {
+        auto dividerBounds = getLocalBounds().withY(yPosition).withHeight(2);
+        g.fillRect(dividerBounds.toFloat().reduced(20, 0));
 
-    // Second separator (after sliders)
-    tempBounds.removeFromTop(180);
-    g.fillRect(tempBounds.removeFromTop(2).toFloat().reduced(20, 0));
+        if (title.isNotEmpty())
+        {
+            g.setColour(juce::Colours::white);
+            g.setFont(16.0f);
+            auto titleBounds = getLocalBounds().withY(yPosition - 20).withHeight(20);
+            g.drawText(title, titleBounds, juce::Justification::centred, false);
+            g.setColour(juce::Colours::darkgrey);
+        }
+        };
 
-    // Third separator (after preset controls, before limiter)
-    tempBounds.removeFromTop(80); // Adjust this value based on your layout
-    g.fillRect(tempBounds.removeFromTop(2).toFloat().reduced(20, 0));
-
-    // Add a section title for the gain controls
-    g.setColour(juce::Colours::white);
-    g.setFont(16.0f);
-
-   // auto tempBounds = getLocalBounds();
-    tempBounds.removeFromTop(50); // Position after the main title
-    auto gainTitleArea = tempBounds.removeFromTop(30);
-    g.drawText("Gain Controls", gainTitleArea, juce::Justification::centred, true);
+    // Draw dividers at key positions (adjusted for the taller header)
+    drawSectionDivider(130, "Gain");
+    drawSectionDivider(250, "Filter");
+    drawSectionDivider(370, "Distortion");
+    drawSectionDivider(510, "Presets");
+    drawSectionDivider(570, "");
+    drawSectionDivider(660, "Limiter");
 }
 
 void NaniDistortionAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds();
-    bounds.removeFromTop(50); // Space for title
 
-    // Top area for title, bypass button, and stereo width control
-    auto topArea = bounds.removeFromTop(80); // Increased height for controls
-
-    // Position the bypass button in the top left
-    auto bypassArea = topArea.removeFromLeft(100).reduced(10);
-    bypassButton.setBounds(bypassArea);
-
-    // Position the stereo width control in the top right
-    auto stereoWidthArea = topArea.removeFromRight(100);
-    stereoWidthSlider.setBounds(stereoWidthArea.reduced(10));
-
-    // Reserve space for meters on left and right
+    // Constants for layout
+    const int labelWidth = 100;
+    const int sliderHeight = 40;
+    const int sectionSpacing = 15;
     const int meterWidth = 20;
     const int meterSpacing = 5;
-    const int meterLabelHeight = 20;
+
+    // ===== HEADER SECTION =====
+    auto headerSection = bounds.removeFromTop(70); // Increased height for header
+
+    // Bypass button (top left)
+    auto bypassArea = headerSection.removeFromLeft(120).reduced(10);
+    bypassButton.setBounds(bypassArea);
+
+    // Title (center)
+    auto titleArea = headerSection.removeFromLeft(headerSection.getWidth() - 140); // Adjusted width
+
+    // Stereo width (top right) - increased area and adjusted position
+    auto stereoWidthArea = headerSection.removeFromRight(140); // Increased width
+
+    // Position the stereo width control with more space
+    stereoWidthSlider.setBounds(stereoWidthArea.reduced(10));
+
+    // Make sure the label is positioned correctly
+    stereoWidthLabel.setBounds(stereoWidthArea.removeFromTop(20));
+
+    // Rest of your layout code remains the same...
+    // ===== METERS SECTION =====
+    // We'll place meters on the sides of the entire remaining area
+    auto mainContentWithMeters = bounds;
 
     // Left side meters (input)
-    auto leftMeterArea = bounds.removeFromLeft(meterWidth * 2 + meterSpacing + 10);
-    leftMeterArea.removeFromTop(50); // Space for title
-
-    auto inputLabelArea = leftMeterArea.removeFromTop(meterLabelHeight);
+    auto leftMeterArea = mainContentWithMeters.removeFromLeft(meterWidth * 2 + meterSpacing + 10);
+    auto inputLabelArea = leftMeterArea.removeFromTop(20);
     inputMeterLabel.setBounds(inputLabelArea);
 
     auto inputMeterAreaL = leftMeterArea.removeFromLeft(meterWidth);
@@ -309,10 +359,8 @@ void NaniDistortionAudioProcessorEditor::resized()
     inputLevelMeterR.setBounds(inputMeterAreaR);
 
     // Right side meters (output)
-    auto rightMeterArea = bounds.removeFromRight(meterWidth * 2 + meterSpacing + 10);
-    rightMeterArea.removeFromTop(50); // Space for title
-
-    auto outputLabelArea = rightMeterArea.removeFromTop(meterLabelHeight);
+    auto rightMeterArea = mainContentWithMeters.removeFromRight(meterWidth * 2 + meterSpacing + 10);
+    auto outputLabelArea = rightMeterArea.removeFromTop(20);
     outputMeterLabel.setBounds(outputLabelArea);
 
     auto outputMeterAreaL = rightMeterArea.removeFromLeft(meterWidth);
@@ -323,54 +371,44 @@ void NaniDistortionAudioProcessorEditor::resized()
     auto outputMeterAreaR = rightMeterArea.removeFromLeft(meterWidth);
     outputLevelMeterR.setBounds(outputMeterAreaR);
 
-    // Position the reset clip button
-    auto resetButtonArea = bounds.removeFromTop(30);
-    int buttonWidth = 100;
-    int buttonHeight = 25;
-    int buttonX = resetButtonArea.getCentreX() - buttonWidth / 2;
-    int buttonY = resetButtonArea.getCentreY() - buttonHeight / 2;
-    resetClipButton.setBounds(buttonX, buttonY, buttonWidth, buttonHeight);
+    // Main content area (between meters)
+    auto mainContent = mainContentWithMeters;
 
-    // Define the createSliderLayout lambda once at the beginning
-    const int labelWidth = 100;
-    const int sliderHeight = 40;
-    auto createSliderLayout = [&](juce::Slider& slider, juce::Label& label)
+    // Helper lambda for creating slider layouts
+    auto createSliderLayout = [&](CustomSlider& slider, juce::Label& label)
         {
-            auto sliderArea = bounds.removeFromTop(sliderHeight);
+            auto sliderArea = mainContent.removeFromTop(sliderHeight);
             label.setBounds(sliderArea.removeFromLeft(labelWidth).reduced(5, 0));
             slider.setBounds(sliderArea.reduced(5, 0));
         };
 
-    // Input and Output Gain controls (at the top of the UI)
+    // ===== GAIN SECTION =====
+    mainContent.removeFromTop(sectionSpacing);
     createSliderLayout(inputGainSlider, inputGainLabel);
     createSliderLayout(outputGainSlider, outputGainLabel);
 
-    // Add a spacer before the filter knobs
-    bounds.removeFromTop(10);
+    // ===== FILTER SECTION =====
+    mainContent.removeFromTop(sectionSpacing);
+    auto filterKnobArea = mainContent.removeFromTop(100);
+    filterCutoffSlider.setBounds(filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 2).reduced(15));
+    filterResonanceSlider.setBounds(filterKnobArea.reduced(15));
 
-    // Top area for the big filter knobs
-    auto filterKnobArea = bounds.removeFromTop(140);
-    filterCutoffSlider.setBounds(filterKnobArea.removeFromLeft(getWidth() / 2).reduced(20));
-    filterResonanceSlider.setBounds(filterKnobArea.reduced(20));
-
-    bounds.removeFromTop(20); // Spacer before sliders
-
-    // Middle area for the four linear sliders
+    // ===== DISTORTION SECTION =====
+    mainContent.removeFromTop(sectionSpacing);
     createSliderLayout(driveSlider, driveLabel);
     createSliderLayout(bitDepthSlider, bitDepthLabel);
     createSliderLayout(sampleRateSlider, sampleRateLabel);
     createSliderLayout(mixSlider, mixLabel);
 
-    bounds.removeFromTop(20); // Spacer before combo boxes
-
-    // ComboBoxes layout
+    // ===== COMBO BOXES SECTION =====
+    mainContent.removeFromTop(sectionSpacing);
     const auto comboBoxHeight = 25;
-    const auto comboBoxMargin = 10;
+    const auto comboBoxMargin = 5;
 
     auto createComboBoxLayout = [&](juce::ComboBox& comboBox)
         {
-            comboBox.setBounds(bounds.removeFromTop(comboBoxHeight).reduced(getWidth() * 0.15, 0));
-            bounds.removeFromTop(comboBoxMargin);
+            comboBox.setBounds(mainContent.removeFromTop(comboBoxHeight).reduced(mainContent.getWidth() * 0.15, 0));
+            mainContent.removeFromTop(comboBoxMargin);
         };
 
     createComboBoxLayout(distortionTypeComboBox);
@@ -378,38 +416,56 @@ void NaniDistortionAudioProcessorEditor::resized()
     createComboBoxLayout(filterRoutingComboBox);
     createComboBoxLayout(oversamplingComboBox);
 
-    // Preset controls
-    bounds.removeFromTop(20); // Add more space before preset controls
-
+    // ===== PRESET SECTION =====
+    mainContent.removeFromTop(sectionSpacing);
     const int presetControlHeight = 25;
     const int presetControlSpacing = 5;
 
-    auto presetArea = bounds.removeFromTop(presetControlHeight + presetControlSpacing * 2);
+    // Make preset controls more compact by placing them side by side
+    auto presetArea = mainContent.removeFromTop(presetControlHeight + presetControlSpacing);
     presetArea.reduce(10, 0);
 
-    auto presetComboBoxArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.6f);
-    presetComboBox.setBounds(presetComboBoxArea.reduced(0, presetControlSpacing));
+    // Preset combo box (left)
+    auto presetComboBoxArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.4f);
+    presetComboBox.setBounds(presetComboBoxArea.reduced(presetControlSpacing));
 
-    auto presetNameEditorArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.5f);
-    presetNameEditor.setBounds(presetNameEditorArea.reduced(presetControlSpacing, presetControlSpacing));
+    // Preset name editor (center)
+    auto presetNameEditorArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.4f);
+    presetNameEditor.setBounds(presetNameEditorArea.reduced(presetControlSpacing));
 
-    auto buttonsArea = presetArea;
-    savePresetButton.setBounds(buttonsArea.removeFromLeft(buttonsArea.getWidth() * 0.5f).reduced(presetControlSpacing));
-    deletePresetButton.setBounds(buttonsArea.reduced(presetControlSpacing));
+    // Save and delete buttons (right)
+    auto saveButtonArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.5f);
+    savePresetButton.setBounds(saveButtonArea.reduced(presetControlSpacing));
+    deletePresetButton.setBounds(presetArea.reduced(presetControlSpacing));
 
-    // Add more space after preset controls (before the separator)
-    bounds.removeFromTop(20);
+    // ===== RESET CLIP BUTTON =====
+    mainContent.removeFromTop(sectionSpacing);
+    auto resetButtonArea = mainContent.removeFromTop(30);
+    int buttonWidth = 100;
+    int buttonHeight = 25;
+    int buttonX = resetButtonArea.getCentreX() - buttonWidth / 2;
+    int buttonY = resetButtonArea.getCentreY() - buttonHeight / 2;
+    resetClipButton.setBounds(buttonX, buttonY, buttonWidth, buttonHeight);
 
-    // Limiter section (after the separator)
-    bounds.removeFromTop(20); // Add space after the separator, before limiter controls
+    // ===== LIMITER SECTION =====
+    mainContent.removeFromTop(sectionSpacing);
 
-    // Limiter toggle button
-    auto limiterHeaderArea = bounds.removeFromTop(30);
+    // Limiter toggle
+    auto limiterHeaderArea = mainContent.removeFromTop(30);
     limiterEnabledButton.setBounds(limiterHeaderArea.reduced(10, 0));
 
-    // Limiter sliders
-    createSliderLayout(limiterThresholdSlider, limiterThresholdLabel);
-    createSliderLayout(limiterReleaseSlider, limiterReleaseLabel);
+    // Place limiter sliders side by side to save vertical space
+    auto limiterSlidersArea = mainContent.removeFromTop(sliderHeight);
+    auto limiterThresholdArea = limiterSlidersArea.removeFromLeft(limiterSlidersArea.getWidth() / 2);
+    limiterThresholdLabel.setBounds(limiterThresholdArea.removeFromLeft(labelWidth).reduced(5, 0));
+    limiterThresholdSlider.setBounds(limiterThresholdArea.reduced(5, 0));
+
+    auto limiterReleaseArea = limiterSlidersArea;
+    limiterReleaseLabel.setBounds(limiterReleaseArea.removeFromLeft(labelWidth).reduced(5, 0));
+    limiterReleaseSlider.setBounds(limiterReleaseArea.reduced(5, 0));
+
+    // Add some padding at the bottom
+    mainContent.removeFromTop(20);
 }
 
 void NaniDistortionAudioProcessorEditor::updatePresetComboBox()
@@ -515,6 +571,21 @@ void NaniDistortionAudioProcessorEditor::showDeletePresetConfirmation()
             }
             }));
 }
+void NaniDistortionAudioProcessorEditor::updateAllSliderDisplays()
+{
+    // Update all slider displays
+    inputGainSlider.updateTextDisplay();
+    outputGainSlider.updateTextDisplay();
+    driveSlider.updateTextDisplay();
+    bitDepthSlider.updateTextDisplay();
+    sampleRateSlider.updateTextDisplay();
+    mixSlider.updateTextDisplay();
+    filterCutoffSlider.updateTextDisplay();
+    filterResonanceSlider.updateTextDisplay();
+    limiterThresholdSlider.updateTextDisplay();
+    limiterReleaseSlider.updateTextDisplay();
+    stereoWidthSlider.updateTextDisplay();
+}
 
 void NaniDistortionAudioProcessorEditor::timerCallback()
 {
@@ -523,4 +594,13 @@ void NaniDistortionAudioProcessorEditor::timerCallback()
     inputLevelMeterR.setLevel(processor.getInputLevel(1));
     outputLevelMeterL.setLevel(processor.getOutputLevel(0));
     outputLevelMeterR.setLevel(processor.getOutputLevel(1));
+
+    // Update slider displays on first timer call
+    static bool firstTimerCall = true;
+    if (firstTimerCall)
+    {
+        updateAllSliderDisplays();
+        firstTimerCall = false;
+    }
 }
+
