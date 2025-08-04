@@ -1,9 +1,16 @@
-#include "PluginProcessor.h"
+﻿#include "PluginProcessor.h"
 #include "PluginEditor.h"
 
 NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDistortionAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
+    backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background1_jpg, BinaryData::Background1_jpgSize);
+
+	// Load the sprite strip for knobs
+    knobSpriteStrip = juce::ImageCache::getFromMemory(BinaryData::Knob1_png,
+        BinaryData::Knob1_pngSize);
+
+
     // A shorter alias for the Value Tree State
     auto& vts = processor.getValueTreeState();
 
@@ -26,27 +33,153 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     setupLinearSlider(bitDepthSlider, bitDepthLabel, "bitdepth", "Bit Depth", bitDepthAttachment);
     setupLinearSlider(sampleRateSlider, sampleRateLabel, "samplerate", "Sample Rate", sampleRateAttachment);
     setupLinearSlider(mixSlider, mixLabel, "mix", "Mix", mixAttachment);
-    
-    // --- Filter Components (Rotary) ---
+
+    //-----------------------------------------------------------------------------------------------------------------------//
+    // In your constructor after creating the filterCutoffSlider:
     addAndMakeVisible(filterCutoffSlider);
     filterCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
     filterCutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
     filterCutoffAttachment = std::make_unique<SliderAttachment>(vts, "filterCutoff", filterCutoffSlider);
+
+    // Set the rotary parameters to match your knob's rotation range
+    filterCutoffSlider.setRotaryParameters(
+        juce::MathConstants<float>::pi * 1.5f,  // start angle (270 degrees)
+        juce::MathConstants<float>::pi * 2.5f,  // end angle (450 degrees)
+        true);  // stop at end
+
+    // Set a fixed size for the knob (128x128 is ideal)
+    filterCutoffSlider.setSize(80, 80);
+
+    // Set a custom LookAndFeel for the knob
+    auto customKnobLookAndFeel = std::make_unique<CustomKnobLookAndFeel>();
+    filterCutoffSlider.setLookAndFeel(customKnobLookAndFeel.get());
+    filterCutoffSlider.setColour(juce::Slider::rotarySliderFillColourId, juce::Colours::transparentBlack);
+    customKnobLookAndFeel.release();
+    //-----------------------------------------------------------------------------------------------------------------------//
+
+    
+    // --- Filter Components (Rotary) ---
+    //addAndMakeVisible(filterCutoffSlider);
+    //filterCutoffSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    //filterCutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    //filterCutoffAttachment = std::make_unique<SliderAttachment>(vts, "filterCutoff", filterCutoffSlider);
 
     addAndMakeVisible(filterCutoffLabel);
     filterCutoffLabel.setText("Cutoff", juce::dontSendNotification);
     filterCutoffLabel.setJustificationType(juce::Justification::centred);
     filterCutoffLabel.attachToComponent(&filterCutoffSlider, false);
 
+    //addAndMakeVisible(filterResonanceSlider);
+    //filterResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    //filterResonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    //filterResonanceAttachment = std::make_unique<SliderAttachment>(vts, "filterResonance", filterResonanceSlider);
+    // Resonance Knob (sprite-strip L&F)
     addAndMakeVisible(filterResonanceSlider);
     filterResonanceSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    filterResonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    filterResonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    filterResonanceSlider.setRotaryParameters(
+        juce::MathConstants<float>::pi * 1.5f,
+        juce::MathConstants<float>::pi * 2.5f,
+        true
+        );
+    filterResonanceSlider.setSize(96, 96);
     filterResonanceAttachment = std::make_unique<SliderAttachment>(vts, "filterResonance", filterResonanceSlider);
+        {
+        auto lnf = std::make_unique<CustomKnobLookAndFeel>();
+        filterResonanceSlider.setLookAndFeel(lnf.get());
+        // we release ownership so JUCE will delete it when the slider is destroyed
+            lnf.release();
+        }
 
     addAndMakeVisible(filterResonanceLabel);
     filterResonanceLabel.setText("Resonance", juce::dontSendNotification);
     filterResonanceLabel.setJustificationType(juce::Justification::centred);
     filterResonanceLabel.attachToComponent(&filterResonanceSlider, false);
+
+    // Drive Knob (rotary with sprite strip)
+    addAndMakeVisible(driveSlider);
+    driveSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    driveSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    driveSlider.setRotaryParameters(
+        juce::MathConstants<float>::pi * 1.5f,   // start angle 270°
+        juce::MathConstants<float>::pi * 2.5f,   // end angle 450°
+        true
+         );
+    driveSlider.setSize(80, 80);
+    driveAttachment = std::make_unique<SliderAttachment>(vts, "drive", driveSlider);
+        // apply the same custom sprite‐knob L&F
+        {
+        auto lnf = std::make_unique<CustomKnobLookAndFeel>();
+        driveSlider.setLookAndFeel(lnf.get());
+        lnf.release();
+        }
+    addAndMakeVisible(driveLabel);
+    driveLabel.setText("Drive", juce::dontSendNotification);
+    driveLabel.setJustificationType(juce::Justification::centred);
+    driveLabel.attachToComponent(&driveSlider, false);
+
+    // Mix Knob (rotary with sprite strip)
+    addAndMakeVisible(mixSlider);
+    mixSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    mixSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 80, 20);
+    mixSlider.setRotaryParameters(
+        juce::MathConstants<float>::pi * 1.5f,
+        juce::MathConstants<float>::pi * 2.5f,
+        true
+         );
+    mixSlider.setSize(80, 80);
+    mixAttachment = std::make_unique<SliderAttachment>(vts, "mix", mixSlider);
+    {
+        auto lnf = std::make_unique<CustomKnobLookAndFeel>();
+        mixSlider.setLookAndFeel(lnf.get());
+        lnf.release();
+        }
+    addAndMakeVisible(mixLabel);
+    mixLabel.setText("Mix", juce::dontSendNotification);
+    mixLabel.setJustificationType(juce::Justification::centred);
+    mixLabel.attachToComponent(&mixSlider, false);
+
+    // Bit Depth Knob
+    addAndMakeVisible(bitDepthSlider);
+    bitDepthSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    bitDepthSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    bitDepthSlider.setRotaryParameters(
+        juce::MathConstants<float>::pi * 1.5f,
+        juce::MathConstants<float>::pi * 2.5f,
+        true
+        );
+    bitDepthSlider.setSize(80, 80);
+    bitDepthAttachment = std::make_unique<SliderAttachment>(vts, "bitDepth", bitDepthSlider);
+    {
+        auto lnf = std::make_unique<CustomKnobLookAndFeel>();
+        bitDepthSlider.setLookAndFeel(lnf.get());
+        lnf.release();
+        }
+    addAndMakeVisible(bitDepthLabel);
+    bitDepthLabel.setText("Bit Depth", juce::dontSendNotification);
+    bitDepthLabel.setJustificationType(juce::Justification::centred);
+    bitDepthLabel.attachToComponent(&bitDepthSlider, false);
+
+    // Sample Rate Knob
+    addAndMakeVisible(sampleRateSlider);
+    sampleRateSlider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
+    sampleRateSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
+    sampleRateSlider.setRotaryParameters(
+        juce::MathConstants<float>::pi * 1.5f,
+        juce::MathConstants<float>::pi * 2.5f,
+        true
+        );
+    sampleRateSlider.setSize(80, 80);
+    sampleRateAttachment = std::make_unique<SliderAttachment>(vts, "sampleRate", sampleRateSlider);
+    {
+        auto lnf = std::make_unique<CustomKnobLookAndFeel>();
+        sampleRateSlider.setLookAndFeel(lnf.get());
+        lnf.release();
+        }
+    addAndMakeVisible(sampleRateLabel);
+    sampleRateLabel.setText("Sample Rate", juce::dontSendNotification);
+    sampleRateLabel.setJustificationType(juce::Justification::centred);
+    sampleRateLabel.attachToComponent(&sampleRateSlider, false);
 
     // --- ComboBoxes ---
     addAndMakeVisible(filterTypeComboBox);
@@ -63,7 +196,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     filterRoutingLabel.setText("Filter Routing", juce::dontSendNotification);
     filterRoutingLabel.attachToComponent(&filterRoutingComboBox, true);
     
-    setSize(500, 420);
+    
     
     // <<< ADD THE NEW DISTORTION TYPE COMBOBOX
     addAndMakeVisible(distortionTypeComboBox);
@@ -73,7 +206,6 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     distortionTypeLabel.setText("Distortion Mode", juce::dontSendNotification);
     distortionTypeLabel.attachToComponent(&distortionTypeComboBox, true);
 
-    setSize(500, 500); // <<< Increase height slightly for the new control
 
     // Add this to your constructor in PluginEditor.cpp:
     addAndMakeVisible(oversamplingComboBox);
@@ -83,8 +215,6 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     oversamplingLabel.setText("Oversampling", juce::dontSendNotification);
     oversamplingLabel.attachToComponent(&oversamplingComboBox, true);
 
-    // Increase the window size to accommodate the new control
-    setSize(500, 530);
 
     // Preset ComboBox
     addAndMakeVisible(presetComboBox);
@@ -111,8 +241,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     presetNameEditor.setJustification(juce::Justification::centred);
     presetNameEditor.setTextToShowWhenEmpty("New Preset Name", juce::Colours::grey.withAlpha(0.5f));
 
-    // In your constructor, update the size:
-    setSize(500, 560); // Increase height for the preset controls
+
 
     // Limiter section title
     addAndMakeVisible(limiterEnabledButton);
@@ -142,8 +271,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     limiterReleaseLabel.setText("Release", juce::dontSendNotification);
     limiterReleaseLabel.setJustificationType(juce::Justification::centredLeft);
 
-    // Increase window size to accommodate limiter controls
-    setSize(500, 700);
+  
 
 	// --- Gain Controls ---
     // Input Gain
@@ -168,8 +296,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     outputGainLabel.setText("Output Gain", juce::dontSendNotification);
     outputGainLabel.setJustificationType(juce::Justification::centredLeft);
 
-    // Increase window size to accommodate gain controls
-    setSize(500, 820);
+  
 
     // Level meter labels
     addAndMakeVisible(inputMeterLabel);
@@ -190,8 +317,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     //// Start a timer to update the meters
     //startTimerHz(30); // 30 fps is smooth enough for meters
 
-    // Adjust window size to accommodate meters
-    setSize(600, 820); // Wider to fit meters on sides
+  
 
     // Start a timer to update the meters
     startTimerHz(30); // 30 fps is smooth enough for meters (Increase for reactive meters)
@@ -260,213 +386,215 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     updateAllSliderDisplays();
 
     // Adjust window size to accommodate meters
-    setSize(600, 760); 
+    setSize(600, 600); 
 }
 
 NaniDistortionAudioProcessorEditor::~NaniDistortionAudioProcessorEditor() 
 {
+    filterCutoffSlider.setLookAndFeel(nullptr); // Important to avoid memory leaks
     stopTimer();
 }
 
 void NaniDistortionAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour::fromRGB(35, 35, 39));
+    // === BACKGROUND ===
+    if (backgroundImage.isValid())
+    {
+        g.drawImage(backgroundImage, getLocalBounds().toFloat());
+    }
+    else
+    {
+        g.fillAll(juce::Colour::fromRGB(35, 35, 39));
+    }
 
-    // Draw title
+    // === TITLE ===
     g.setColour(juce::Colours::white);
     g.setFont(20.0f);
-
-    auto bounds = getLocalBounds();
-    auto headerSection = bounds.removeFromTop(70); // Match the increased height
-    headerSection.removeFromLeft(120); // Space for bypass button
-    auto titleArea = headerSection.removeFromLeft(headerSection.getWidth() - 140); // Adjusted width
+    auto header = getLocalBounds().removeFromTop(60);
+    auto titleArea = header.withTrimmedLeft(100).withTrimmedRight(120); // between bypass and stereo width
     g.drawFittedText("Nani Distortion", titleArea, juce::Justification::centred, 1);
 
-    // Rest of your paint code...
-    // Draw section dividers and titles
+    // === SECTION DIVIDERS ===
     g.setColour(juce::Colours::darkgrey);
+    g.setFont(14.0f);
 
-    // Helper function to draw a section divider with title
-    auto drawSectionDivider = [&](int yPosition, const juce::String& title) {
-        auto dividerBounds = getLocalBounds().withY(yPosition).withHeight(2);
-        g.fillRect(dividerBounds.toFloat().reduced(20, 0));
-
-        if (title.isNotEmpty())
+    auto drawDivider = [&](int y, const juce::String& text)
         {
+            auto area = getLocalBounds();
+            g.fillRect(area.withY(y).withHeight(1).reduced(10, 0));
             g.setColour(juce::Colours::white);
-            g.setFont(16.0f);
-            auto titleBounds = getLocalBounds().withY(yPosition - 20).withHeight(20);
-            g.drawText(title, titleBounds, juce::Justification::centred, false);
+            g.drawText(text, area.withY(y - 15).withHeight(20), juce::Justification::centred);
             g.setColour(juce::Colours::darkgrey);
-        }
         };
 
-    // Draw dividers at key positions (adjusted for the taller header)
-    drawSectionDivider(130, "Gain");
-    drawSectionDivider(250, "Filter");
-    drawSectionDivider(370, "Distortion");
-    drawSectionDivider(510, "Presets");
-    drawSectionDivider(570, "");
-    drawSectionDivider(660, "Limiter");
+    // Update divider Y positions to match compact layout
+    drawDivider(100, "Gain");
+    drawDivider(150, "Filter");
+    drawDivider(270, "Distortion");
+    drawDivider(380, "Processing Mode");
+	//drawDivider(390, "Presets"); Presets are now at the top
+    drawDivider(500, "Limiter");
 }
+
 
 void NaniDistortionAudioProcessorEditor::resized()
 {
     auto bounds = getLocalBounds();
 
-    // Constants for layout
-    const int labelWidth = 100;
-    const int sliderHeight = 40;
-    const int sectionSpacing = 15;
+    const int headerHeight = 60;
     const int meterWidth = 20;
-    const int meterSpacing = 5;
+    const int meterSpacing = 4;
+    const int labelWidth = 90;
+    const int controlHeight = 25;
+    const int controlSpacing = 8;
+    const int comboBoxHeight = 28;
+    const int rotaryKnobSize = 80;
 
-    // ===== HEADER SECTION =====
-    auto headerSection = bounds.removeFromTop(70); // Increased height for header
+    // === PRESET CONTROLS ===
+    auto presetRow = bounds.removeFromTop(28);
+    auto w = presetRow.getWidth();
+    presetComboBox.setBounds(presetRow.removeFromLeft(w * 0.25f).reduced(2));
+    presetNameEditor.setBounds(presetRow.removeFromLeft(w * 0.35f).reduced(2));
+    savePresetButton.setBounds(presetRow.removeFromLeft(w * 0.2f).reduced(2));
+    deletePresetButton.setBounds(presetRow.reduced(2));
 
-    // Bypass button (top left)
-    auto bypassArea = headerSection.removeFromLeft(120).reduced(10);
-    bypassButton.setBounds(bypassArea);
+    bounds.removeFromTop(6);
 
-    // Title (center)
-    auto titleArea = headerSection.removeFromLeft(headerSection.getWidth() - 140); // Adjusted width
+    // ===== HEADER =====
+    auto header = bounds.removeFromTop(headerHeight);
+    bypassButton.setBounds(header.removeFromLeft(100).reduced(5));
+    stereoWidthLabel.setBounds(header.removeFromRight(120).removeFromTop(15));
+    stereoWidthSlider.setBounds(header.removeFromTop(rotaryKnobSize));
 
-    // Stereo width (top right) - increased area and adjusted position
-    auto stereoWidthArea = headerSection.removeFromRight(140); // Increased width
+    // ===== METERS LEFT/RIGHT =====
+    auto leftMeters = bounds.removeFromLeft(meterWidth * 2 + meterSpacing + 5);
+    inputMeterLabel.setBounds(leftMeters.removeFromTop(15));
+    inputLevelMeterL.setBounds(leftMeters.removeFromLeft(meterWidth));
+    leftMeters.removeFromLeft(meterSpacing);
+    inputLevelMeterR.setBounds(leftMeters.removeFromLeft(meterWidth));
 
-    // Position the stereo width control with more space
-    stereoWidthSlider.setBounds(stereoWidthArea.reduced(10));
+    auto rightMeters = bounds.removeFromRight(meterWidth * 2 + meterSpacing + 5);
+    outputMeterLabel.setBounds(rightMeters.removeFromTop(15));
+    outputLevelMeterL.setBounds(rightMeters.removeFromLeft(meterWidth));
+    rightMeters.removeFromLeft(meterSpacing);
+    outputLevelMeterR.setBounds(rightMeters.removeFromLeft(meterWidth));
 
-    // Make sure the label is positioned correctly
-    stereoWidthLabel.setBounds(stereoWidthArea.removeFromTop(20));
+    // ===== MAIN AREA =====
+    auto area = bounds.reduced(6);
 
-    // Rest of your layout code remains the same...
-    // ===== METERS SECTION =====
-    // We'll place meters on the sides of the entire remaining area
-    auto mainContentWithMeters = bounds;
+    auto layoutRow = [&](CustomSlider& s1, juce::Label& l1, CustomSlider& s2, juce::Label& l2)
+    {
+        auto row = area.removeFromTop(controlHeight);
+        auto half = row.removeFromLeft(row.getWidth() / 2);
 
-    // Left side meters (input)
-    auto leftMeterArea = mainContentWithMeters.removeFromLeft(meterWidth * 2 + meterSpacing + 10);
-    auto inputLabelArea = leftMeterArea.removeFromTop(20);
-    inputMeterLabel.setBounds(inputLabelArea);
+        l1.setBounds(half.removeFromLeft(labelWidth));
+        s1.setBounds(half.reduced(2, 0));
 
-    auto inputMeterAreaL = leftMeterArea.removeFromLeft(meterWidth);
-    inputLevelMeterL.setBounds(inputMeterAreaL);
+        l2.setBounds(row.removeFromLeft(labelWidth));
+        s2.setBounds(row.reduced(2, 0));
 
-    leftMeterArea.removeFromLeft(meterSpacing);
+        area.removeFromTop(controlSpacing);
+    };
 
-    auto inputMeterAreaR = leftMeterArea.removeFromLeft(meterWidth);
-    inputLevelMeterR.setBounds(inputMeterAreaR);
+    // === Gain ===
+    layoutRow(inputGainSlider, inputGainLabel, outputGainSlider, outputGainLabel);
 
-    // Right side meters (output)
-    auto rightMeterArea = mainContentWithMeters.removeFromRight(meterWidth * 2 + meterSpacing + 10);
-    auto outputLabelArea = rightMeterArea.removeFromTop(20);
-    outputMeterLabel.setBounds(outputLabelArea);
+    // === Filter knobs ===
+    auto filterArea = area.removeFromTop(rotaryKnobSize + 10);
+    filterCutoffSlider.setBounds(filterArea.removeFromLeft(filterArea.getWidth() / 2).reduced(8));
+    filterResonanceSlider.setBounds(filterArea.reduced(8));
+    area.removeFromTop(controlSpacing);
 
-    auto outputMeterAreaL = rightMeterArea.removeFromLeft(meterWidth);
-    outputLevelMeterL.setBounds(outputMeterAreaL);
+    // === Distortion Sliders ===
+    //layoutRow(driveSlider, driveLabel, bitDepthSlider, bitDepthLabel);
+    //layoutRow(sampleRateSlider, sampleRateLabel, mixSlider, mixLabel);
+    //// Place Drive and Mix as big rotary knobs
+    //auto knobRow = area.removeFromTop(rotaryKnobSize + 10);
+    //// Drive
+    //driveSlider.setBounds(knobRow.removeFromLeft(knobRow.getWidth() / 2).reduced(8));
+    //// Bit Depth / Sample Rate remain linear in the next rows
+    //auto nextRow = area.removeFromTop(controlHeight);
+    //bitDepthLabel.setBounds(nextRow.removeFromLeft(labelWidth));
+    //bitDepthSlider.setBounds(nextRow.reduced(2, 0));
+    //area.removeFromTop(controlSpacing);
+    //nextRow = area.removeFromTop(controlHeight);
+    //sampleRateLabel.setBounds(nextRow.removeFromLeft(labelWidth));
+    //sampleRateSlider.setBounds(nextRow.reduced(2, 0));
+    //area.removeFromTop(controlSpacing);
+    //// Mix
+    //auto mixRow = area.removeFromTop(rotaryKnobSize + 10);
+    //mixSlider.setBounds(mixRow.removeFromLeft(mixRow.getWidth() / 2).reduced(8));
+    // find the tallest of the four knobs
+    int knobHeight = juce::jmax(
+        driveSlider.getHeight(),
+        bitDepthSlider.getHeight(),
+        sampleRateSlider.getHeight(),
+        mixSlider.getHeight()
+    );
 
-    rightMeterArea.removeFromLeft(meterSpacing);
+    // allocate that height plus a bit of padding
+    auto knobArea = area.removeFromTop(knobHeight + 5);
 
-    auto outputMeterAreaR = rightMeterArea.removeFromLeft(meterWidth);
-    outputLevelMeterR.setBounds(outputMeterAreaR);
+    // split into four equal columns
+    int colW = knobArea.getWidth() / 4;
 
-    // Main content area (between meters)
-    auto mainContent = mainContentWithMeters;
+    // Drive
+    auto r = knobArea.removeFromLeft(colW).reduced(8);
+    driveSlider.setBounds(r);
 
-    // Helper lambda for creating slider layouts
-    auto createSliderLayout = [&](CustomSlider& slider, juce::Label& label)
-        {
-            auto sliderArea = mainContent.removeFromTop(sliderHeight);
-            label.setBounds(sliderArea.removeFromLeft(labelWidth).reduced(5, 0));
-            slider.setBounds(sliderArea.reduced(5, 0));
-        };
+    // Bit Depth
+    r = knobArea.removeFromLeft(colW).reduced(8);
+    bitDepthSlider.setBounds(r);
 
-    // ===== GAIN SECTION =====
-    mainContent.removeFromTop(sectionSpacing);
-    createSliderLayout(inputGainSlider, inputGainLabel);
-    createSliderLayout(outputGainSlider, outputGainLabel);
+    // Sample Rate
+    r = knobArea.removeFromLeft(colW).reduced(8);
+    sampleRateSlider.setBounds(r);
 
-    // ===== FILTER SECTION =====
-    mainContent.removeFromTop(sectionSpacing);
-    auto filterKnobArea = mainContent.removeFromTop(100);
-    filterCutoffSlider.setBounds(filterKnobArea.removeFromLeft(filterKnobArea.getWidth() / 2).reduced(15));
-    filterResonanceSlider.setBounds(filterKnobArea.reduced(15));
+    // Mix
+    r = knobArea.removeFromLeft(colW).reduced(8);
+    mixSlider.setBounds(r);
 
-    // ===== DISTORTION SECTION =====
-    mainContent.removeFromTop(sectionSpacing);
-    createSliderLayout(driveSlider, driveLabel);
-    createSliderLayout(bitDepthSlider, bitDepthLabel);
-    createSliderLayout(sampleRateSlider, sampleRateLabel);
-    createSliderLayout(mixSlider, mixLabel);
+    // === ComboBoxes ===
+    auto comboRow = [&](juce::ComboBox& cb)
+    {
+        cb.setBounds(area.removeFromTop(comboBoxHeight).reduced(40, 0));
+        area.removeFromTop(4);
+    };
 
-    // ===== COMBO BOXES SECTION =====
-    mainContent.removeFromTop(sectionSpacing);
-    const auto comboBoxHeight = 25;
-    const auto comboBoxMargin = 5;
+    comboRow(distortionTypeComboBox);
+    comboRow(filterTypeComboBox);
+    comboRow(filterRoutingComboBox);
+    comboRow(oversamplingComboBox);
 
-    auto createComboBoxLayout = [&](juce::ComboBox& comboBox)
-        {
-            comboBox.setBounds(mainContent.removeFromTop(comboBoxHeight).reduced(mainContent.getWidth() * 0.15, 0));
-            mainContent.removeFromTop(comboBoxMargin);
-        };
+    //// === Presets Row ===
+    //auto presetRow = area.removeFromTop(28);
+    //auto w = presetRow.getWidth();
+    //presetComboBox.setBounds(presetRow.removeFromLeft(w * 0.25f).reduced(2));
+    //presetNameEditor.setBounds(presetRow.removeFromLeft(w * 0.35f).reduced(2));
+    //savePresetButton.setBounds(presetRow.removeFromLeft(w * 0.2f).reduced(2));
+    //deletePresetButton.setBounds(presetRow.reduced(2));
 
-    createComboBoxLayout(distortionTypeComboBox);
-    createComboBoxLayout(filterTypeComboBox);
-    createComboBoxLayout(filterRoutingComboBox);
-    createComboBoxLayout(oversamplingComboBox);
+    //area.removeFromTop(6);
 
-    // ===== PRESET SECTION =====
-    mainContent.removeFromTop(sectionSpacing);
-    const int presetControlHeight = 25;
-    const int presetControlSpacing = 5;
+    // === Limiter ===
+    limiterEnabledButton.setBounds(area.removeFromTop(22).reduced(4));
 
-    // Make preset controls more compact by placing them side by side
-    auto presetArea = mainContent.removeFromTop(presetControlHeight + presetControlSpacing);
-    presetArea.reduce(10, 0);
+    auto limiterRow = area.removeFromTop(controlHeight);
+    auto half = limiterRow.removeFromLeft(limiterRow.getWidth() / 2);
+    limiterThresholdLabel.setBounds(half.removeFromLeft(labelWidth));
+    limiterThresholdSlider.setBounds(half.reduced(2, 0));
 
-    // Preset combo box (left)
-    auto presetComboBoxArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.4f);
-    presetComboBox.setBounds(presetComboBoxArea.reduced(presetControlSpacing));
+    limiterReleaseLabel.setBounds(limiterRow.removeFromLeft(labelWidth));
+    limiterReleaseSlider.setBounds(limiterRow.reduced(2, 0));
 
-    // Preset name editor (center)
-    auto presetNameEditorArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.4f);
-    presetNameEditor.setBounds(presetNameEditorArea.reduced(presetControlSpacing));
-
-    // Save and delete buttons (right)
-    auto saveButtonArea = presetArea.removeFromLeft(presetArea.getWidth() * 0.5f);
-    savePresetButton.setBounds(saveButtonArea.reduced(presetControlSpacing));
-    deletePresetButton.setBounds(presetArea.reduced(presetControlSpacing));
-
-    // ===== RESET CLIP BUTTON =====
-    mainContent.removeFromTop(sectionSpacing);
-    auto resetButtonArea = mainContent.removeFromTop(30);
-    int buttonWidth = 100;
-    int buttonHeight = 25;
-    int buttonX = resetButtonArea.getCentreX() - buttonWidth / 2;
-    int buttonY = resetButtonArea.getCentreY() - buttonHeight / 2;
-    resetClipButton.setBounds(buttonX, buttonY, buttonWidth, buttonHeight);
-
-    // ===== LIMITER SECTION =====
-    mainContent.removeFromTop(sectionSpacing);
-
-    // Limiter toggle
-    auto limiterHeaderArea = mainContent.removeFromTop(30);
-    limiterEnabledButton.setBounds(limiterHeaderArea.reduced(10, 0));
-
-    // Place limiter sliders side by side to save vertical space
-    auto limiterSlidersArea = mainContent.removeFromTop(sliderHeight);
-    auto limiterThresholdArea = limiterSlidersArea.removeFromLeft(limiterSlidersArea.getWidth() / 2);
-    limiterThresholdLabel.setBounds(limiterThresholdArea.removeFromLeft(labelWidth).reduced(5, 0));
-    limiterThresholdSlider.setBounds(limiterThresholdArea.reduced(5, 0));
-
-    auto limiterReleaseArea = limiterSlidersArea;
-    limiterReleaseLabel.setBounds(limiterReleaseArea.removeFromLeft(labelWidth).reduced(5, 0));
-    limiterReleaseSlider.setBounds(limiterReleaseArea.reduced(5, 0));
-
-    // Add some padding at the bottom
-    mainContent.removeFromTop(20);
+    // === Reset Clip ===
+    // Move reset button to the bottom center
+    auto resetArea = getLocalBounds().reduced(10);
+    resetClipButton.setBounds(resetArea.removeFromBottom(40).withSizeKeepingCentre(100, 24));
+   
 }
+
+
 
 void NaniDistortionAudioProcessorEditor::updatePresetComboBox()
 {
