@@ -151,6 +151,10 @@ private:
 
     juce::Image knobSpriteStrip;  // Add this for your sprite strip
 
+
+    // Add this line for your logo:
+    juce::ImageComponent logoComponent;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessorEditor)
 };
 
@@ -165,9 +169,13 @@ public:
 
         if (image.isValid())
         {
-            const int numFrames = 24;  // Your sprite strip has 24 frames
-            const int frameWidth = 128;
-            const int frameHeight = 128;
+            //const int numFrames = 24;  // Your sprite strip has 24 frames
+            //const int frameWidth = 128;
+            //const int frameHeight = 128;
+
+            const int numFrames = 64;  // Your sprite strip has 24 frames
+            const int frameWidth = 172;
+            const int frameHeight = 172;
 
             // Get the slider's value range
             auto range = slider.getRange();
@@ -175,12 +183,17 @@ public:
             float maxValue = range.getEnd();
             float currentValue = slider.getValue();
 
-            // Calculate the normalized position (0.0 to 1.0)
-            float normalizedPos = (currentValue - minValue) / (maxValue - minValue);
+            //// Calculate the normalized position (0.0 to 1.0)
+            //float normalizedPos = (currentValue - minValue) / (maxValue - minValue);
 
-            // Calculate which frame to show
-            int frameIndex = static_cast<int>(normalizedPos * (numFrames - 1));
-            frameIndex = juce::jlimit(0, numFrames - 1, frameIndex);
+            // simplest: use JUCE's normalized position that respects skew
+            float normalizedPos = sliderPos;
+
+            //// Calculate which frame to show
+            //int frameIndex = static_cast<int>(normalizedPos * (numFrames - 1));
+            //frameIndex = juce::jlimit(0, numFrames - 1, frameIndex);
+            int frameIndex = juce::jlimit(0, numFrames - 1,
+                (int)std::round(normalizedPos * (numFrames - 1)));
 
             // Set high quality resampling
             g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);

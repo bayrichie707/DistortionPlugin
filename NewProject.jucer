@@ -6,7 +6,11 @@
     <GROUP id="{A81BC0EA-9CFF-154D-55AA-BA63456525B5}" name="Source">
       <GROUP id="{2983D5E4-D3D2-42DB-2B91-A833D1D28892}" name="Resources">
         <FILE id="t83ba6" name="Background1.jpg" compile="0" resource="1" file="Resources/Background1.jpg"/>
+        <FILE id="mXuwj0" name="Background2.jpg" compile="0" resource="1" file="Resources/Background2.jpg"/>
+        <FILE id="PG3Acm" name="cutoffKnob1.png" compile="0" resource="1" file="Resources/cutoffKnob1.png"/>
         <FILE id="YEyacY" name="Knob1.png" compile="0" resource="1" file="Resources/Knob1.png"/>
+        <FILE id="AXFwG7" name="swordfishLogo.png" compile="0" resource="1"
+              file="Resources/swordfishLogo.png"/>
       </GROUP>
       <FILE id="zHBiXP" name="CustomSlider.h" compile="0" resource="0" file="Source/CustomSlider.h"/>
       <FILE id="l2CWx3" name="LevelMeter.h" compile="0" resource="0" file="Source/LevelMeter.h"/>

@@ -65,9 +65,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout NaniDistortionAudioProcessor
     // <<< ADD THE NEW FILTER PARAMETERS
 
     // Cutoff: Logarithmic scale for a natural feel
+    juce::NormalisableRange<float> cutoffRange(20.0f, 20000.0f, 1.0f);
+    cutoffRange.setSkewForCentre(1000.0f);
+
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "filterCutoff", 1 }, "Filter Cutoff",
-        juce::NormalisableRange<float>(20.0f, 20000.0f, 1.0f, 0.25f), 20000.0f));
+        cutoffRange,
+        1000.0f  // default at midpoint
+    ));
 
     // Resonance (Q)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
