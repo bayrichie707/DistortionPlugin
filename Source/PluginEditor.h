@@ -24,6 +24,8 @@ public:
 	// Method to update all slider displays
     void updateAllSliderDisplays();
 
+    juce::Image getKnobSprite() { return knobSpriteStrip; }
+
 
 private:
     NaniDistortionAudioProcessor& processor;
@@ -145,6 +147,73 @@ private:
     juce::Label stereoWidthLabel;
     std::unique_ptr<SliderAttachment> stereoWidthAttachment;
 
+    juce::Image backgroundImage;
+
+    juce::Image knobSpriteStrip;  // Add this for your sprite strip
+
+
+    // Add this line for your logo:
+    juce::ImageComponent logoComponent;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessorEditor)
+};
+
+class CustomKnobLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
+        float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
+        juce::Slider& slider) override
+    {
+        auto image = dynamic_cast<NaniDistortionAudioProcessorEditor*>(slider.getParentComponent())->getKnobSprite();
+
+        if (image.isValid())
+        {
+            //const int numFrames = 24;  // Your sprite strip has 24 frames
+            //const int frameWidth = 128;
+            //const int frameHeight = 128;
+
+            const int numFrames = 64;  // Your sprite strip has 24 frames
+            const int frameWidth = 172;
+            const int frameHeight = 172;
+
+            // Get the slider's value range
+            auto range = slider.getRange();
+            float minValue = range.getStart();
+            float maxValue = range.getEnd();
+            float currentValue = slider.getValue();
+
+            //// Calculate the normalized position (0.0 to 1.0)
+            //float normalizedPos = (currentValue - minValue) / (maxValue - minValue);
+
+            // simplest: use JUCE's normalized position that respects skew
+            float normalizedPos = sliderPos;
+
+            //// Calculate which frame to show
+            //int frameIndex = static_cast<int>(normalizedPos * (numFrames - 1));
+            //frameIndex = juce::jlimit(0, numFrames - 1, frameIndex);
+            int frameIndex = juce::jlimit(0, numFrames - 1,
+                (int)std::round(normalizedPos * (numFrames - 1)));
+
+            // Set high quality resampling
+            g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+
+            // Calculate the correct size to maintain 1:1 aspect ratio
+            int drawSize = juce::jmin(width, height);
+            int drawX = x + (width - drawSize) / 2;
+            int drawY = y + (height - drawSize) / 2;
+
+            // Draw the appropriate frame
+            g.drawImage(image,
+                drawX, drawY, drawSize, drawSize,  // Destination (square)
+                0, frameIndex * frameHeight,       // Source X, Y
+                frameWidth, frameHeight);          // Source width, height
+        }
+        else
+        {
+            // Fallback drawing
+            juce::LookAndFeel_V4::drawRotarySlider(g, x, y, width, height,
+                sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
+        }
+    }
 };
