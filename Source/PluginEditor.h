@@ -1,9 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
 #include "LevelMeter.h"
 #include "CustomSlider.h"
+
+class CustomKnobLookAndFeel;
 
 // A handy alias for the long attachment class names to keep code clean
 using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
@@ -25,6 +27,10 @@ public:
     void updateAllSliderDisplays();
 
     juce::Image getKnobSprite() { return knobSpriteStrip; }
+
+    // >>> Add these as PUBLIC so the Look&Feel can call them
+    juce::Image getSpriteFor(const juce::Slider& s) const;
+    int         getSpriteFramesFor(const juce::Slider& s) const;
 
 
 private:
@@ -50,6 +56,14 @@ private:
 
     // Stereo width control
     CustomSlider stereoWidthSlider;
+
+    // --- Choice knobs rendered as rotary sliders ---
+    CustomSlider filterTypeKnob, distortionTypeKnob, oversamplingKnob;
+    juce::Label  filterTypeKnobLabel, distortionTypeKnobLabel, oversamplingKnobLabel;
+    std::unique_ptr<SliderAttachment> filterTypeKnobAttachment, distortionTypeKnobAttachment, oversamplingKnobAttachment;
+
+    // Shared LookAndFeel for all knobs
+    std::unique_ptr<CustomKnobLookAndFeel> knobLNF;
 
     //// Distortion Components
     //juce::Slider driveSlider;
@@ -151,6 +165,16 @@ private:
 
     juce::Image knobSpriteStrip;  // Add this for your sprite strip
 
+    // Sprites & their frame counts
+    juce::Image spriteDefault;
+    juce::Image spriteFilterType;
+    int spriteDefaultFrames = 64; // whatever your main knob strip uses
+    int spriteFilterTypeFrames = 3;  // our 3-step strip
+
+    //// Helpers for the L&F
+    //juce::Image getSpriteFor(const juce::Slider& s) const;
+    //int         getSpriteFramesFor(const juce::Slider& s) const;
+
 
     // Add this line for your logo:
     juce::ImageComponent logoComponent;
@@ -161,59 +185,44 @@ private:
 class CustomKnobLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
-    void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
+    void CustomKnobLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
         float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
         juce::Slider& slider) override
     {
-        auto image = dynamic_cast<NaniDistortionAudioProcessorEditor*>(slider.getParentComponent())->getKnobSprite();
-
-        if (image.isValid())
+        // Safer than dynamic_cast to parent: walk up to the editor
+        if (auto* editor = slider.findParentComponentOfClass<NaniDistortionAudioProcessorEditor>())
         {
-            //const int numFrames = 24;  // Your sprite strip has 24 frames
-            //const int frameWidth = 128;
-            //const int frameHeight = 128;
+            // Ask the editor which sprite and how many frames this slider should use
+            auto img = editor->getSpriteFor(slider);
+            const int numFrames = editor->getSpriteFramesFor(slider);
 
-            const int numFrames = 64;  // Your sprite strip has 24 frames
-            const int frameWidth = 172;
-            const int frameHeight = 172;
+            if (img.isValid() && numFrames > 0)
+            {
+                // JUCE gives us a normalized [0..1] position that respects param skew
+                const float normalized = juce::jlimit(0.0f, 1.0f, sliderPos);
+                const int frameIndex = juce::jlimit(0, numFrames - 1,
+                    (int)std::round(normalized * (numFrames - 1)));
 
-            // Get the slider's value range
-            auto range = slider.getRange();
-            float minValue = range.getStart();
-            float maxValue = range.getEnd();
-            float currentValue = slider.getValue();
+                // Assume a VERTICAL strip (N frames stacked top→bottom). If horizontal, swap logic.
+                const int frameH = img.getHeight() / numFrames;
+                const int frameW = img.getWidth();
 
-            //// Calculate the normalized position (0.0 to 1.0)
-            //float normalizedPos = (currentValue - minValue) / (maxValue - minValue);
+                // Draw square, centered in the bounds
+                g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+                const int drawSize = juce::jmin(width, height);
+                const int dx = x + (width - drawSize) / 2;
+                const int dy = y + (height - drawSize) / 2;
 
-            // simplest: use JUCE's normalized position that respects skew
-            float normalizedPos = sliderPos;
-
-            //// Calculate which frame to show
-            //int frameIndex = static_cast<int>(normalizedPos * (numFrames - 1));
-            //frameIndex = juce::jlimit(0, numFrames - 1, frameIndex);
-            int frameIndex = juce::jlimit(0, numFrames - 1,
-                (int)std::round(normalizedPos * (numFrames - 1)));
-
-            // Set high quality resampling
-            g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-
-            // Calculate the correct size to maintain 1:1 aspect ratio
-            int drawSize = juce::jmin(width, height);
-            int drawX = x + (width - drawSize) / 2;
-            int drawY = y + (height - drawSize) / 2;
-
-            // Draw the appropriate frame
-            g.drawImage(image,
-                drawX, drawY, drawSize, drawSize,  // Destination (square)
-                0, frameIndex * frameHeight,       // Source X, Y
-                frameWidth, frameHeight);          // Source width, height
+                g.drawImage(img,
+                    dx, dy, drawSize, drawSize,     // destination
+                    0, frameIndex * frameH,         // source (x, y)
+                    frameW, frameH);                // source (w, h)
+                return;
+            }
         }
-        else
-        {
-            // Fallback drawing
-            juce::LookAndFeel_V4::drawRotarySlider(g, x, y, width, height,
-                sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
-        }
+
+        // Fallback if no sprite is available
+        juce::LookAndFeel_V4::drawRotarySlider(g, x, y, width, height,
+            sliderPos, rotaryStartAngle, rotaryEndAngle, slider);
     }
 };
