@@ -630,6 +630,20 @@ void NaniDistortionAudioProcessorEditor::updateAllSliderDisplays()
 
 void NaniDistortionAudioProcessorEditor::timerCallback()
 {
+    // If the host suspended processing (slot disabled / offline), zero or freeze meters.
+    if (processor.isSuspended())
+    {
+        // Option A: zero
+        inputLevelMeterL.setLevel(0.0f);
+        inputLevelMeterR.setLevel(0.0f);
+        outputLevelMeterL.setLevel(0.0f);
+        outputLevelMeterR.setLevel(0.0f);
+        return;
+
+        // Option B (freeze): just return without updating levels
+        // return;
+    }
+
     // Update the level meters
     inputLevelMeterL.setLevel(processor.getInputLevel(0));
     inputLevelMeterR.setLevel(processor.getInputLevel(1));

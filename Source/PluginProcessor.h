@@ -57,6 +57,8 @@ public:
     // This tells the compiler that our class has a static function with this name.
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+
+
 private:
     // The AudioProcessorValueTreeState must be declared before any parameter pointers
     juce::AudioProcessorValueTreeState treeState;

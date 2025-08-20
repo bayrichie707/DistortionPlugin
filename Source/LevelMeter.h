@@ -8,7 +8,8 @@ class LevelMeter : public juce::Component, private juce::Timer
 public:
     LevelMeter() : juce::Component()
     {
-        startTimerHz(60); // Update at 60 fps
+        //startTimerHz(60); // Update at 60 fps
+        startTimerHz(30);
     }
 
     ~LevelMeter() override

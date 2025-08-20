@@ -857,6 +857,7 @@ void NaniDistortionAudioProcessor::applyStereoWidth(juce::AudioBuffer<float>& bu
     }
 }
 
+
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new NaniDistortionAudioProcessor();
