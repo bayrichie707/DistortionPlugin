@@ -9,6 +9,8 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
 	backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background3_png, BinaryData::Background3_pngSize);
     //knobSpriteStrip = juce::ImageCache::getFromMemory(BinaryData::Knob1_png, BinaryData::Knob1_pngSize);
 
+
+
     // 2a) Load sprites from BinaryData
     spriteDefault = juce::ImageCache::getFromMemory(BinaryData::cutoffKnob1_png,
         BinaryData::cutoffKnob1_pngSize);   // your existing strip
@@ -18,6 +20,17 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     spriteFilterType = juce::ImageCache::getFromMemory(BinaryData::filterTypeKnob1_png,
         BinaryData::filterTypeKnob1_pngSize);
     spriteFilterTypeFrames = 3;
+
+    spriteOversampling = juce::ImageCache::getFromMemory(
+        BinaryData::oversamplingKnob1_png,
+        BinaryData::oversamplingKnob1_pngSize);
+    spriteOversamplingFrames = 5;
+
+    // identify the slider so L&F can pick the right strip
+    oversamplingKnob.setComponentID("oversampling");
+    // 5 steps: 0..4 (e.g., 1x, 2x, 4x, 8x, 16x)
+    oversamplingKnob.setRange(0.0, 4.0, 1.0);
+    oversamplingKnob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
 
     // 2b) Give component IDs so we can distinguish them in L&F
     filterTypeKnob.setComponentID("filterType");    // identify this slider
@@ -192,6 +205,15 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     addAndMakeVisible(inputLevelMeterR);
     addAndMakeVisible(outputLevelMeterL);
     addAndMakeVisible(outputLevelMeterR);
+
+    // 13 LEDs → 14 frames (frame 0 = all off, frame 13 = all on)
+    // Replace the BinaryData symbol with your actual asset name.
+    auto meterStrip = juce::ImageCache::getFromMemory(
+        BinaryData::outputMeterRight_png,  // <-- your PNG name
+        BinaryData::outputMeterRight_pngSize);
+
+    for (auto* m : { &inputLevelMeterL, &inputLevelMeterR, &outputLevelMeterL, &outputLevelMeterR })
+        m->setSpriteStrip(meterStrip, /*frames*/14, /*frame0AtTop*/ true, /*numLights*/ 13);
 
     // === Reset Clip Button ===
     addAndMakeVisible(resetClipButton);
@@ -462,13 +484,13 @@ void NaniDistortionAudioProcessorEditor::resized()
     stereoWidthSlider.setBounds(map(522, 500, k, k));  // STEREOWIDTH
 
     // ─── METERS ─── (2× vertical bars each side)
-    const int meterW = 18, meterH = 210, meterSpacing = 4;
+    const int meterW = 8, meterH = 147, meterSpacing = 33;
     // Left meters under “INPUT METER”
-    inputLevelMeterL.setBounds(map(58, 210, meterW, meterH));
-    inputLevelMeterR.setBounds(map(58 + meterW + meterSpacing, 210, meterW, meterH));
+    inputLevelMeterL.setBounds(map(29, 222, meterW, meterH));
+    inputLevelMeterR.setBounds(map(29 + meterW + meterSpacing, 222, meterW, meterH));
     // Right meters under “OUTPUT METER”
-    outputLevelMeterL.setBounds(map(520, 210, meterW, meterH));
-    outputLevelMeterR.setBounds(map(520 + meterW + meterSpacing, 210, meterW, meterH));
+    outputLevelMeterL.setBounds(map(523, 222, meterW, meterH));
+    outputLevelMeterR.setBounds(map(523 + meterW + meterSpacing, 222, meterW, meterH));
 
     // Hide the text labels for meters (art already labels them)
     inputMeterLabel.setVisible(false);
@@ -626,8 +648,8 @@ void NaniDistortionAudioProcessorEditor::timerCallback()
 juce::Image NaniDistortionAudioProcessorEditor::getSpriteFor(const juce::Slider& s) const
 {
     // Per-knob overrides
-    if (s.getComponentID() == "filterType")
-        return spriteFilterType;
+    if (s.getComponentID() == "filterType")   return spriteFilterType;
+    if (s.getComponentID() == "oversampling") return spriteOversampling;
 
     // Default for everyone else
     return spriteDefault.isValid() ? spriteDefault : knobSpriteStrip; // fallback to your original
@@ -635,8 +657,8 @@ juce::Image NaniDistortionAudioProcessorEditor::getSpriteFor(const juce::Slider&
 
 int NaniDistortionAudioProcessorEditor::getSpriteFramesFor(const juce::Slider& s) const
 {
-    if (s.getComponentID() == "filterType")
-        return spriteFilterTypeFrames;
+    if (s.getComponentID() == "filterType")   return spriteFilterTypeFrames;
+    if (s.getComponentID() == "oversampling") return spriteOversamplingFrames;
 
     return spriteDefault.isValid() ? spriteDefaultFrames : 64; // sensible fallback
 }

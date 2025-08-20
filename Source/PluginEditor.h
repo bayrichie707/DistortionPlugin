@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <JuceHeader.h>
 #include "PluginProcessor.h"
@@ -167,9 +167,13 @@ private:
 
     // Sprites & their frame counts
     juce::Image spriteDefault;
+    int         spriteDefaultFrames = 64; // whatever your main knob strip uses
     juce::Image spriteFilterType;
-    int spriteDefaultFrames = 64; // whatever your main knob strip uses
-    int spriteFilterTypeFrames = 3;  // our 3-step strip
+    int         spriteFilterTypeFrames = 3;  // our 3-step strip
+    juce::Image spriteOversampling;
+    int         spriteOversamplingFrames = 5;
+    
+    
 
     //// Helpers for the L&F
     //juce::Image getSpriteFor(const juce::Slider& s) const;
