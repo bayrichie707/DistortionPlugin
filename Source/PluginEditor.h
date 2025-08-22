@@ -5,6 +5,92 @@
 #include "LevelMeter.h"
 #include "CustomSlider.h"
 
+// --- 2-frame filmstrip LED (frame 0 = OFF, frame 1 = ON) ---
+class FilmstripLED : public juce::Component
+{
+public:
+    void setFilmstrip(juce::Image img, bool vertical = true)
+    {
+        strip = img; verticalStrip = vertical; repaint();
+    }
+
+    void setOn(bool shouldBeOn)
+    {
+        if (on == shouldBeOn) return;
+        on = shouldBeOn; repaint();
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        if (!strip.isValid()) return;
+
+        const int frames = 2;
+        const int idx = on ? 1 : 0;
+
+        const int frameW = verticalStrip ? strip.getWidth() : strip.getWidth() / frames;
+        const int frameH = verticalStrip ? strip.getHeight() / frames : strip.getHeight();
+        const int sx = verticalStrip ? 0 : idx * frameW;
+        const int sy = verticalStrip ? idx * frameH : 0;
+
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+
+        // Draw selected frame into component bounds (works on all JUCE versions)
+        g.drawImage(strip,
+            /*destX*/ 0, /*destY*/ 0, /*destW*/ getWidth(), /*destH*/ getHeight(),
+            /*srcX*/  sx, /*srcY*/  sy, /*srcW*/ frameW,    /*srcH*/  frameH,
+            /*fillAlpha*/ false);
+    }
+
+
+private:
+    juce::Image strip;
+    bool verticalStrip{ true };
+    bool on{ false };
+};
+
+
+// Simple 2+ frame filmstrip toggle button.
+// Uses frame 0 for OFF, frame 1 for ON (and keeps scaling cleanly).
+class SpriteToggleButton : public juce::ToggleButton
+{
+public:
+    void setFilmstrip(juce::Image img, int frames, bool vertical = true)
+    {
+        filmstrip = img;
+        numFrames = (frames > 0 ? frames : 1);
+        verticalStrip = vertical;
+        repaint();
+    }
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override
+    {
+        if (!filmstrip.isValid() || numFrames <= 0)
+            return juce::ToggleButton::paintButton(g, highlighted, down);
+
+        // Hard-coded mapping: frame 0 = OFF, frame 1 = ON
+        const int idx = getToggleState() ? 1 : 0;
+
+        const int frameW = verticalStrip ? filmstrip.getWidth() : filmstrip.getWidth() / numFrames;
+        const int frameH = verticalStrip ? filmstrip.getHeight() / numFrames : filmstrip.getHeight();
+        const int sx = verticalStrip ? 0 : idx * frameW;
+        const int sy = verticalStrip ? idx * frameH : 0;
+
+        g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+        g.drawImage(filmstrip,
+            /*destX*/ 0, /*destY*/ 0, /*destW*/ getWidth(), /*destH*/ getHeight(),
+            /*srcX*/  sx, /*srcY*/  sy, /*srcW*/ frameW,    /*srcH*/  frameH,
+            /*fillAlpha*/ false);
+
+        if (down) { g.setColour(juce::Colours::black.withAlpha(0.12f)); g.fillRect(getLocalBounds()); }
+        else if (highlighted) { g.setColour(juce::Colours::white.withAlpha(0.12f)); g.fillRect(getLocalBounds()); }
+    }
+
+private:
+    juce::Image filmstrip;
+    int  numFrames{ 2 };
+    bool verticalStrip{ true };
+};
+
 class CustomKnobLookAndFeel;
 
 // A handy alias for the long attachment class names to keep code clean
@@ -121,7 +207,10 @@ private:
     // Limiter components
     //juce::Slider limiterThresholdSlider;
     //juce::Slider limiterReleaseSlider;
-    juce::ToggleButton limiterEnabledButton;
+	SpriteToggleButton limiterEnabledButton;
+    /*juce::ToggleButton limiterEnabledButton;*/
+    // ----- Limiter LED (visual indicator above the button) -----
+    FilmstripLED limiterLED;
 
     juce::Label limiterThresholdLabel;
     juce::Label limiterReleaseLabel;

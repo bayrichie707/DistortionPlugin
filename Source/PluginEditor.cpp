@@ -6,7 +6,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
 {
     // === Load assets ===
     /*backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background2_jpg, BinaryData::Background2_jpgSize);*/
-	backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background3_png, BinaryData::Background3_pngSize);
+	backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background4_png, BinaryData::Background4_pngSize);
     //knobSpriteStrip = juce::ImageCache::getFromMemory(BinaryData::Knob1_png, BinaryData::Knob1_pngSize);
 
 
@@ -141,9 +141,45 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     bypassButton.setColour(juce::ToggleButton::tickColourId, juce::Colours::red);
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(vts, "bypass", bypassButton);
 
+    //addAndMakeVisible(limiterEnabledButton);
+    //limiterEnabledButton.setButtonText("Limiter");
+    //limiterEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(vts, "limiterEnabled", limiterEnabledButton);
+    // === BYPASS BUTTON ===
+    addAndMakeVisible(bypassButton);
+    bypassButton.setButtonText("Bypass");
+    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        vts, "bypass", bypassButton);
+
+    // === LIMITER BUTTON ===
+    // Limiter sprite button
     addAndMakeVisible(limiterEnabledButton);
-    limiterEnabledButton.setButtonText("Limiter");
-    limiterEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(vts, "limiterEnabled", limiterEnabledButton);
+    limiterEnabledButton.setButtonText({}); // no text overlay
+
+    // NOTE: update these two symbols to whatever Projucer generated for your PNG:
+    auto limiterStrip = juce::ImageCache::getFromMemory(
+        BinaryData::limiterButton1_png,
+        BinaryData::limiterButton1_pngSize);
+
+    // 2 frames, vertical filmstrip (21×54 => each frame 21×27)
+    limiterEnabledButton.setFilmstrip(limiterStrip, /*frames*/ 2, /*vertical*/ true);
+
+    limiterEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+        vts, "limiterEnabled", limiterEnabledButton);
+
+    // === LIMITER LED (24x19 per frame, 2 frames vertical) ===
+    addAndMakeVisible(limiterLED);
+
+    // Replace these symbols with the actual names Projucer generated for your LED PNG
+    auto limiterLedStrip = juce::ImageCache::getFromMemory(
+        BinaryData::limiterLED1_png,              // <-- change to your symbol
+        BinaryData::limiterLED1_pngSize);         // <-- change to your symbol size
+
+    limiterLED.setFilmstrip(limiterLedStrip, /*vertical*/ true);
+
+    // Initial sync with the parameter (so it’s correct on open)
+    if (auto* v = processor.getValueTreeState().getRawParameterValue("limiterEnabled"))
+        limiterLED.setOn(v->load() > 0.5f);
+
 
     // === ComboBoxes ===
     auto setupComboBox = [&](juce::ComboBox& box, juce::Label& label, const juce::StringArray& items,
@@ -501,7 +537,11 @@ void NaniDistortionAudioProcessorEditor::resized()
     bypassButton.setBounds(map(45, 77, 60, 24));
 
     limiterEnabledButton.setButtonText({});
-    limiterEnabledButton.setBounds(map(45, 523, 54, 40));
+    limiterEnabledButton.setBounds(map(42, 521, 21, 27)); // frame-sized, scales with UI
+
+    // Center 24x19 LED above the 54x40 limiter button (design coords)
+    limiterLED.setBounds(map(41, 500, 24, 19)); // x = 45 + (54-24)/2 = 60, y = 523 - 19 - 4 = 500
+    limiterLED.setInterceptsMouseClicks(false, false); // visual-only
 
     // Clip reset (kept small, off to the side)
     resetClipButton.setBounds(map(28, 581, 80, 22));
@@ -649,6 +689,10 @@ void NaniDistortionAudioProcessorEditor::timerCallback()
     inputLevelMeterR.setLevel(processor.getInputLevel(1));
     outputLevelMeterL.setLevel(processor.getOutputLevel(0));
     outputLevelMeterR.setLevel(processor.getOutputLevel(1));
+
+    if (auto* v = processor.getValueTreeState().getRawParameterValue("limiterEnabled"))
+        limiterLED.setOn(v->load() > 0.5f);
+
 
     // Update slider displays on first timer call
     static bool firstTimerCall = true;

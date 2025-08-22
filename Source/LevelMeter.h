@@ -1,4 +1,4 @@
-﻿// LevelMeter.h
+// LevelMeter.h
 #pragma once
 
 #include <JuceHeader.h>
