@@ -87,9 +87,9 @@ public:
             // Optional: keep your tick marks in fallback mode (omitted here for brevity)
         }
 
-        // Clip indicator
-        g.setColour(isClipping ? juce::Colours::red : juce::Colours::darkgrey);
-        g.fillRect(clipRect);
+        //// Clip indicator
+        //g.setColour(isClipping ? juce::Colours::red : juce::Colours::darkgrey);
+        //g.fillRect(clipRect);
 
         //// thin border (optional)
         //g.setColour(juce::Colours::white.withAlpha(0.8f));

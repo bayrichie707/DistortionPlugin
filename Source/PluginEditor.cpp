@@ -6,7 +6,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
 {
     // === Load assets ===
     /*backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background2_jpg, BinaryData::Background2_jpgSize);*/
-	backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background4_png, BinaryData::Background4_pngSize);
+	backgroundImage = juce::ImageCache::getFromMemory(BinaryData::Background5_png, BinaryData::Background5_pngSize);
     //knobSpriteStrip = juce::ImageCache::getFromMemory(BinaryData::Knob1_png, BinaryData::Knob1_pngSize);
 
 
@@ -145,10 +145,44 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     //limiterEnabledButton.setButtonText("Limiter");
     //limiterEnabledAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(vts, "limiterEnabled", limiterEnabledButton);
     // === BYPASS BUTTON ===
+    //addAndMakeVisible(bypassButton);
+    //bypassButton.setButtonText("Bypass");
+    //bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+    //    vts, "bypass", bypassButton);
     addAndMakeVisible(bypassButton);
-    bypassButton.setButtonText("Bypass");
+    bypassButton.setButtonText({}); // no text over the image
+
+    // Load your 2-frame, vertical 24x36 strip (replace symbol names with yours)
+    auto bypassStrip = juce::ImageCache::getFromMemory(
+        BinaryData::bypassButton1_png,        // <-- your PNG symbol
+        BinaryData::bypassButton1_pngSize);   // <-- your PNG size symbol
+
+    bypassButton.setFilmstrip(bypassStrip, /*frames*/ 2, /*vertical*/ true);
+
+    // Keep your existing attachment
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         vts, "bypass", bypassButton);
+
+    // --- Bypass LED (22x18 per frame, 2 frames vertical) ---
+    addAndMakeVisible(bypassLED);
+
+    // Replace these BinaryData symbols with your actual PNG symbol names:
+    auto bypassLedStrip = juce::ImageCache::getFromMemory(
+        BinaryData::bypassLED1_png,          // <-- your symbol
+        BinaryData::bypassLED1_pngSize);     // <-- your symbol size
+
+    bypassLED.setFilmstrip(bypassLedStrip, /*vertical*/ true);
+    bypassLED.setInterceptsMouseClicks(false, false); // visual-only
+
+    // Initial sync so it’s correct on open
+    if (auto* v = processor.getValueTreeState().getRawParameterValue("bypass"))
+        bypassLED.setOn(v->load() > 0.5f);
+
+
+    // (Optional) Initial sync, in case the host paints before the attachment pushes state
+    if (auto* v = processor.getValueTreeState().getRawParameterValue("bypass"))
+        bypassButton.setToggleState(v->load() > 0.5f, juce::dontSendNotification);
+
 
     // === LIMITER BUTTON ===
     // Limiter sprite button
@@ -245,8 +279,8 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     // 13 LEDs → 14 frames (frame 0 = all off, frame 13 = all on)
     // Replace the BinaryData symbol with your actual asset name.
     auto meterStrip = juce::ImageCache::getFromMemory(
-        BinaryData::outputMeterRight_png,  // <-- your PNG name
-        BinaryData::outputMeterRight_pngSize);
+        BinaryData::meter1_png,  // <-- your PNG name
+        BinaryData::meter1_pngSize);
 
     for (auto* m : { &inputLevelMeterL, &inputLevelMeterR, &outputLevelMeterL, &outputLevelMeterR })
         m->setSpriteStrip(meterStrip, /*frames*/14, /*frame0AtTop*/ true, /*numLights*/ 13);
@@ -515,18 +549,18 @@ void NaniDistortionAudioProcessorEditor::resized()
     mixSlider.setBounds(map(339, 369, k, k));  // MIX
 
     limiterThresholdSlider.setBounds(map(148, 500, k, k));  // THRESHOLD
-    limiterReleaseSlider.setBounds(map(280, 500, k, k));  // RELEASE
-    oversamplingKnob.setBounds(map(403, 500, k, k));  // OVERSAMPLING
-    stereoWidthSlider.setBounds(map(522, 500, k, k));  // STEREOWIDTH
+    limiterReleaseSlider.setBounds(map(280, 505, k, k));  // RELEASE
+    oversamplingKnob.setBounds(map(403, 505, k, k));  // OVERSAMPLING
+    stereoWidthSlider.setBounds(map(522, 505, k, k));  // STEREOWIDTH
 
     // ─── METERS ─── (2× vertical bars each side)
-    const int meterW = 8, meterH = 147, meterSpacing = 33;
+    const int meterW = 16, meterH = 167, meterSpacing = 23;
     // Left meters under “INPUT METER”
-    inputLevelMeterL.setBounds(map(29, 222, meterW, meterH));
-    inputLevelMeterR.setBounds(map(29 + meterW + meterSpacing, 222, meterW, meterH));
+    inputLevelMeterL.setBounds(map(26, 215, meterW, meterH));
+    inputLevelMeterR.setBounds(map(26 + meterW + meterSpacing, 215, meterW, meterH));
     // Right meters under “OUTPUT METER”
-    outputLevelMeterL.setBounds(map(523, 222, meterW, meterH));
-    outputLevelMeterR.setBounds(map(523 + meterW + meterSpacing, 222, meterW, meterH));
+    outputLevelMeterL.setBounds(map(520, 215, meterW, meterH));
+    outputLevelMeterR.setBounds(map(520 + meterW + meterSpacing, 215, meterW, meterH));
 
     // Hide the text labels for meters (art already labels them)
     inputMeterLabel.setVisible(false);
@@ -534,7 +568,9 @@ void NaniDistortionAudioProcessorEditor::resized()
 
     // ─── BYPASS LED/SWITCH (top-left) & LIMITER (bottom-left) ───
     bypassButton.setButtonText({});
-    bypassButton.setBounds(map(45, 77, 60, 24));
+    bypassButton.setBounds(map(41, 87, 24, 18));     // or 48x36, 72x54 to scale up
+    // Center a 22x18 LED above the 60x24 bypass switch (design-space math)
+    bypassLED.setBounds(map(19, 61, 22, 18)); // x = 45 + (60-22)/2 = 64, y = 77 - 18 - 4 = 55
 
     limiterEnabledButton.setButtonText({});
     limiterEnabledButton.setBounds(map(42, 521, 21, 27)); // frame-sized, scales with UI
@@ -543,8 +579,8 @@ void NaniDistortionAudioProcessorEditor::resized()
     limiterLED.setBounds(map(41, 500, 24, 19)); // x = 45 + (54-24)/2 = 60, y = 523 - 19 - 4 = 500
     limiterLED.setInterceptsMouseClicks(false, false); // visual-only
 
-    // Clip reset (kept small, off to the side)
-    resetClipButton.setBounds(map(28, 581, 80, 22));
+    //// Clip reset (kept small, off to the side)
+    //resetClipButton.setBounds(map(28, 581, 80, 22));
 }
 
 
@@ -692,6 +728,9 @@ void NaniDistortionAudioProcessorEditor::timerCallback()
 
     if (auto* v = processor.getValueTreeState().getRawParameterValue("limiterEnabled"))
         limiterLED.setOn(v->load() > 0.5f);
+
+    if (auto* v = processor.getValueTreeState().getRawParameterValue("bypass"))
+        bypassLED.setOn(v->load() > 0.5f);
 
 
     // Update slider displays on first timer call

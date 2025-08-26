@@ -81,6 +81,7 @@ public:
             /*srcX*/  sx, /*srcY*/  sy, /*srcW*/ frameW,    /*srcH*/  frameH,
             /*fillAlpha*/ false);
 
+        // Optional hover/press tint
         if (down) { g.setColour(juce::Colours::black.withAlpha(0.12f)); g.fillRect(getLocalBounds()); }
         else if (highlighted) { g.setColour(juce::Colours::white.withAlpha(0.12f)); g.fillRect(getLocalBounds()); }
     }
@@ -242,7 +243,10 @@ private:
     juce::TextButton resetClipButton;
 
     // Bypass button
-    juce::ToggleButton bypassButton;
+    //juce::ToggleButton bypassButton;
+    SpriteToggleButton bypassButton;
+    // ----- Bypass LED (visual indicator by the bypass switch)
+    FilmstripLED bypassLED;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
 
     // Stereo width control
