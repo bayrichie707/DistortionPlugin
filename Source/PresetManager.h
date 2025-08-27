@@ -71,12 +71,40 @@ public:
 
 
     // ===== User Presets (XML snapshots of APVTS) =====
-    void refreshUserPresetFiles()
+    void refreshUserPresetFiles(bool recursive = true)
     {
+        juce::Array<juce::File> found;
         userFiles.clear();
-        userDir.findChildFiles(userFiles, juce::File::findFiles, false, "*.xml");
-        userFiles.sort(); // alphabetical
+
+        // XML files
+        userDir.findChildFiles(found, juce::File::findFiles, recursive, "*.xml");
+
+        // Legacy *.preset files (optional)
+        juce::Array<juce::File> legacy;
+        userDir.findChildFiles(legacy, juce::File::findFiles, recursive, "*.preset");
+        found.addArray(legacy);
+
+        // Sort by relative path (case-insensitive) so grouping is stable
+        juce::File base = userDir;
+        std::vector<juce::File> vec;
+        vec.reserve(found.size());
+        for (auto& f : found) vec.push_back(f);
+
+        std::sort(vec.begin(), vec.end(),
+            [base](const juce::File& a, const juce::File& b)
+            {
+                auto ra = a.getRelativePathFrom(base).toLowerCase();
+                auto rb = b.getRelativePathFrom(base).toLowerCase();
+                return ra < rb;
+            });
+
+        userFiles.ensureStorageAllocated((int)vec.size());
+        for (auto& f : vec) userFiles.add(f);
     }
+
+    // (optional helper, handy for computing relative labels in the editor)
+    juce::File getUserPresetsDirectory() const { return userDir; }
+
     const juce::Array<juce::File>& getUserFiles() const { return userFiles; }
 
     bool saveUserPreset(juce::String presetName) const

@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+//namespace { constexpr int kUserBaseId = 1000; }  // user items = 1000 + index
 
 
 NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDistortionAudioProcessor& p)
@@ -288,10 +289,13 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
             }
             else
             {
-                const int factoryIdx = selId - 1; // 1-based -> 0-based
-                pm->applyFactoryPreset(factoryIdx);
+                pm->applyFactoryPreset(selId - 1);
             }
+
+            // keep the combo visually synced
+            selectCurrentPresetInCombo(false);
         };
+
 
     addAndMakeVisible(savePresetButton);
     savePresetButton.setButtonText("Save As");
@@ -333,7 +337,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
                                 //presetComboBox.setText(file.getFileNameWithoutExtension(), juce::sendNotification);
 
                                 // OR: select by ID if you use kUserBaseId indexing
-                                 constexpr int kUserBaseId = 1000;
+                                /* constexpr int kUserBaseId = 1000;*/
                                  const auto& files = pm->getUserFiles();
                                  for (int i = 0; i < files.size(); ++i)
                                      if (files[i] == file) {
@@ -767,48 +771,57 @@ void NaniDistortionAudioProcessorEditor::updatePresetComboBox()
     if (!pm) return;
 
     presetComboBox.clear();
-    int itemId = 1;
 
-    // Factory presets
+    // ----- Factory presets first -----
+    int nextId = 1;
     const auto& factory = pm->getFactoryNames();
-    for (auto name : factory)
-        presetComboBox.addItem(name, itemId++);
 
-    const int factoryCount = factory.size();
-    const int firstUserId = 1000; // must match kUserBaseId above
+    if (factory.size() > 0)
+    {
+        presetComboBox.addSectionHeading("Factory");   // <-- add this line
+        for (auto name : factory)
+            presetComboBox.addItem(name, nextId++);
 
-    if (factoryCount > 0)
         presetComboBox.addSeparator();
+    }
 
-    // User presets
-    pm->refreshUserPresetFiles();
+    // ----- User presets, grouped by top-level folder -----
+    pm->refreshUserPresetFiles(true); // recursive scan
+
+    juce::File base = pm->getUserPresetsDirectory(); // (or processor.getPresetsDirectory())
     const auto& files = pm->getUserFiles();
-    for (int i = 0; i < files.size(); ++i)
-        presetComboBox.addItem(files[i].getFileNameWithoutExtension(),
-            firstUserId + i);
 
-    // Select the current preset (factory takes precedence)
-    if (pm->getCurrentFactoryIndex() >= 0)
+    juce::String currentHeading;
+    for (int i = 0; i < files.size(); ++i)
     {
-        presetComboBox.setSelectedId(1 + pm->getCurrentFactoryIndex(), juce::dontSendNotification);
-    }
-    else
-    {
-        auto current = pm->getCurrentUserFile();
-        if (current.exists())
+        // relative path like: "Bass/Growl/Dirty.xml" or "MyPreset.xml"
+        juce::String rel = files[i].getRelativePathFrom(base).replaceCharacter('\\', '/');
+
+        // top-level folder name (or "User" if in root)
+        const bool hasSlash = rel.containsChar('/');
+        juce::String top = hasSlash ? rel.upToFirstOccurrenceOf("/", false, false)
+            : juce::String("User");
+
+        if (top != currentHeading)
         {
-            for (int i = 0; i < files.size(); ++i)
-                if (files[i] == current)
-                {
-                    presetComboBox.setSelectedId(firstUserId + i, juce::dontSendNotification);
-                    break;
-                }
+            presetComboBox.addSectionHeading(top);
+            currentHeading = top;
         }
-        else
-        {
-            presetComboBox.setTextWhenNothingSelected("Select Preset");
-        }
+
+        // Visible label inside the group:
+        // - if in a subfolder: show "subpath/filename" (without extension)
+        // - if in root: show just "filename" (without extension)
+        juce::String label = rel.upToLastOccurrenceOf(".", false, false);
+        if (hasSlash)
+            label = rel.fromFirstOccurrenceOf("/", false, false)
+            .upToLastOccurrenceOf(".", false, false);
+
+        // Stable ID: kUserBaseId + index in pm->getUserFiles()
+        presetComboBox.addItem(label, kUserBaseId + i);
     }
+
+    // Keep the selection in sync with whatever is currently loaded
+    selectCurrentPresetInCombo(false);
 }
 
 
@@ -1021,36 +1034,31 @@ void NaniDistortionAudioProcessorEditor::selectCurrentPresetInCombo(bool send)
     auto* pm = processor.getPresetManager();
     if (!pm) return;
 
-    // Factory has priority if set
+    // Factory takes precedence
     if (pm->getCurrentFactoryIndex() >= 0)
     {
-        const int id = 1 + pm->getCurrentFactoryIndex(); // factory IDs are 1..N
-        presetComboBox.setSelectedId(id, send ? juce::sendNotification
-            : juce::dontSendNotification);
+        presetComboBox.setSelectedId(1 + pm->getCurrentFactoryIndex(),
+            send ? juce::sendNotification : juce::dontSendNotification);
         return;
     }
 
-    // Otherwise select by matching the current user file
-    const auto current = pm->getCurrentUserFile();
+    // Otherwise match current user file
+    auto current = pm->getCurrentUserFile();
     if (current.exists())
     {
-        pm->refreshUserPresetFiles(); // make sure we have an up-to-date list
         const auto& files = pm->getUserFiles();
-        constexpr int kUserBaseId = 1000; // your existing constant
-
         for (int i = 0; i < files.size(); ++i)
             if (files[i] == current)
             {
                 presetComboBox.setSelectedId(kUserBaseId + i,
-                    send ? juce::sendNotification
-                    : juce::dontSendNotification);
+                    send ? juce::sendNotification : juce::dontSendNotification);
                 return;
             }
     }
 
-    // Fallback: nothing selected
     presetComboBox.setSelectedId(0, juce::dontSendNotification);
 }
+
 
 
 
