@@ -160,7 +160,8 @@ NaniDistortionAudioProcessor::NaniDistortionAudioProcessor()
 #endif
 {
     // Instantiate your preset manager with the APVTS in this project (treeState)
-    presetManager = std::make_unique<PresetManager>(treeState, "Swordfish Audio", "KamelKrusher");
+    /*presetManager = std::make_unique<PresetManager>(treeState, "Swordfish Audio", "KamelKrusher");*/
+    presetManager = std::make_unique<PresetManager>(treeState, getPresetsDirectory());
 }
 
 NaniDistortionAudioProcessor::~NaniDistortionAudioProcessor() {}
@@ -176,10 +177,10 @@ const juce::String NaniDistortionAudioProcessor::getProgramName(int index) { ret
 void NaniDistortionAudioProcessor::changeProgramName(int index, const juce::String& newName) {}
 
 
-juce::AudioProcessorValueTreeState& NaniDistortionAudioProcessor::getValueTreeState()
-{
-    return treeState;
-}
+//juce::AudioProcessorValueTreeState& NaniDistortionAudioProcessor::getValueTreeState()
+//{
+//    return treeState;
+//}
 
 void NaniDistortionAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
@@ -702,7 +703,7 @@ float NaniDistortionAudioProcessor::waveshaper(float sample, float drive, Distor
 }
 
 // Helper methods for preset management
-juce::File NaniDistortionAudioProcessor::getPresetsDirectory()
+juce::File NaniDistortionAudioProcessor::getPresetsDirectory() const
 {
     // Get the user's application data directory
     juce::File appDataDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory);
@@ -719,45 +720,32 @@ juce::File NaniDistortionAudioProcessor::getPresetsDirectory()
 
 void NaniDistortionAudioProcessor::savePreset(const juce::String& name)
 {
-    // Get the presets directory
-    juce::File presetsDir = getPresetsDirectory();
-
-    // Create a file for the preset
-    juce::File presetFile = presetsDir.getChildFile(name + ".preset");
-
-    // Create an XML element to store the preset data
-    auto presetXml = treeState.state.createXml();
-
-    // Save the XML to the file
-    if (presetXml->writeTo(presetFile))
-    {
-        currentPresetName = name;
-    }
+    auto presetsDir = getPresetsDirectory();
+    auto file = presetsDir.getChildFile(name).withFileExtension(".xml");
+    if (auto xml = treeState.copyState().createXml())
+        if (xml->writeTo(file))
+            currentPresetName = name;
 }
+
 
 void NaniDistortionAudioProcessor::loadPreset(const juce::String& name)
 {
-    // Get the presets directory
-    juce::File presetsDir = getPresetsDirectory();
+    auto presetsDir = getPresetsDirectory();
 
-    // Get the preset file
-    juce::File presetFile = presetsDir.getChildFile(name + ".preset");
+    juce::File file = presetsDir.getChildFile(name + ".xml");
+    if (!file.existsAsFile())
+        file = presetsDir.getChildFile(name + ".preset"); // legacy support
 
-    // Check if the file exists
-    if (presetFile.exists())
+    if (file.existsAsFile())
     {
-        // Load the XML from the file
-        std::unique_ptr<juce::XmlElement> presetXml = juce::XmlDocument::parse(presetFile);
-
-        // Check if the XML is valid
-        if (presetXml.get() != nullptr)
+        if (auto xml = juce::XmlDocument::parse(file))
         {
-            // Load the preset data into the value tree state
-            treeState.replaceState(juce::ValueTree::fromXml(*presetXml));
+            treeState.replaceState(juce::ValueTree::fromXml(*xml));
             currentPresetName = name;
         }
     }
 }
+
 
 void NaniDistortionAudioProcessor::deletePreset(const juce::String& name)
 {
@@ -780,23 +768,24 @@ void NaniDistortionAudioProcessor::deletePreset(const juce::String& name)
 
 juce::StringArray NaniDistortionAudioProcessor::getPresetList()
 {
-    // Get the presets directory
-    juce::File presetsDir = getPresetsDirectory();
+    auto presetsDir = getPresetsDirectory();
 
-    // Create a string array to store the preset names
-    juce::StringArray presetList;
+    juce::StringArray names;
 
-    // Get all files in the directory with the .preset extension
-    juce::Array<juce::File> presetFiles = presetsDir.findChildFiles(juce::File::findFiles, false, "*.preset");
+    // Find .xml
+    auto xmlFiles = presetsDir.findChildFiles(juce::File::findFiles, false, "*.xml");
+    for (auto& f : xmlFiles)
+        names.add(f.getFileNameWithoutExtension());
 
-    // Add each preset name to the list (without the extension)
-    for (auto& file : presetFiles)
-    {
-        presetList.add(file.getFileNameWithoutExtension());
-    }
+    // Also find legacy .preset
+    auto presetFiles = presetsDir.findChildFiles(juce::File::findFiles, false, "*.preset");
+    for (auto& f : presetFiles)
+        names.addIfNotAlreadyThere(f.getFileNameWithoutExtension());
 
-    return presetList;
+    names.sort(true); // A–Z
+    return names;
 }
+
 
 bool NaniDistortionAudioProcessor::hasEditor() const { return true; }
 juce::AudioProcessorEditor* NaniDistortionAudioProcessor::createEditor()

@@ -289,6 +289,12 @@ private:
     // Add this line for your logo:
     juce::ImageComponent logoComponent;
 
+    std::unique_ptr<juce::FileChooser> saveChooser_;
+
+	// Preset navigation helper to select the currently loaded preset
+    void selectCurrentPresetInCombo(bool send = false);
+
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NaniDistortionAudioProcessorEditor)
 };
 

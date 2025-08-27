@@ -53,7 +53,11 @@ public:
     float getOutputLevel(int channel) const;
     
     // Public access to the state for the editor
-    juce::AudioProcessorValueTreeState& getValueTreeState();
+    //juce::AudioProcessorValueTreeState& getValueTreeState();
+
+    juce::AudioProcessorValueTreeState& getValueTreeState() { return treeState; }
+    const juce::AudioProcessorValueTreeState& getValueTreeState() const { return treeState; }
+
     
     // <<< THIS IS THE CRITICAL DECLARATION THAT MUST BE PRESENT
     // This tells the compiler that our class has a static function with this name.
@@ -61,6 +65,8 @@ public:
 
 	// Provide access to the preset manager
     PresetManager* getPresetManager() const { return presetManager.get(); }
+
+    juce::File getPresetsDirectory() const;
 
 
 
@@ -91,7 +97,7 @@ private:
     float waveshaper(float sample, float drive, DistortionType type);
 
 	// Helper methods for preset management
-    juce::File getPresetsDirectory();
+    /*juce::File getPresetsDirectory();*/
     juce::String currentPresetName;
     
     // ADD THIS

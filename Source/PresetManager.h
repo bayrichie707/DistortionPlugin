@@ -6,6 +6,15 @@ class PresetManager
 public:
     using APVTS = juce::AudioProcessorValueTreeState;
 
+    // NEW: take the exact folder to use for user presets
+    PresetManager(APVTS& vts, juce::File userDirIn)
+        : apvts(vts), userDir(std::move(userDirIn))
+    {
+        userDir.createDirectory();
+        buildFactoryPresets();
+        refreshUserPresetFiles();
+    }
+
     PresetManager(APVTS& vts, juce::String org, juce::String product)
         : apvts(vts), orgName(std::move(org)), productName(std::move(product))
     {

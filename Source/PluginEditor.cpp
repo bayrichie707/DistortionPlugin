@@ -294,29 +294,71 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
         };
 
     addAndMakeVisible(savePresetButton);
-    savePresetButton.setButtonText("Save");
+    savePresetButton.setButtonText("Save As");
     savePresetButton.onClick = [this]
         {
             auto* pm = processor.getPresetManager();
             if (!pm) return;
 
-            auto name = presetNameEditor.getText().trim();
-            if (name.isEmpty())
-            {
-                juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-                    "Save Preset", "Please enter a preset name.");
-                return;
-            }
+            juce::File presetsDir = processor.getPresetsDirectory();
+            presetsDir.createDirectory();
 
-            if (pm->saveUserPreset(name))
-            {
-                pm->refreshUserPresetFiles();
-                updatePresetComboBox();   // rebuild list
-                presetNameEditor.clear(); // clear field
-            }
+            juce::File initial = presetsDir.getChildFile("New Preset.xml");
+            saveChooser_ = std::make_unique<juce::FileChooser>("Save Preset As…", initial, "*.xml", true);
+
+            auto flags = juce::FileBrowserComponent::saveMode
+                | juce::FileBrowserComponent::canSelectFiles;
+
+            //          ▼ add pm here ▼
+            saveChooser_->launchAsync(flags, [this, pm, presetsDir](const juce::FileChooser& fc)
+                {
+                    juce::File file = fc.getResult();
+                    saveChooser_.reset();                // OK (we captured this)
+
+                    if (file == juce::File()) return;    // cancelled
+                    if (!file.hasFileExtension("xml"))
+                        file = file.withFileExtension(".xml");
+
+                    if (auto xml = processor.getValueTreeState().copyState().createXml())
+                    {
+                        if (xml->writeTo(file))
+                        {
+                            if (file.getParentDirectory() == presetsDir)
+                            {
+                                // ✅ Refresh the list and select the new preset
+                                pm->refreshUserPresetFiles();
+                                updatePresetComboBox();
+
+                                //// EITHER: select by matching name (simple, no ID math)
+                                //presetComboBox.setText(file.getFileNameWithoutExtension(), juce::sendNotification);
+
+                                // OR: select by ID if you use kUserBaseId indexing
+                                 constexpr int kUserBaseId = 1000;
+                                 const auto& files = pm->getUserFiles();
+                                 for (int i = 0; i < files.size(); ++i)
+                                     if (files[i] == file) {
+                                         presetComboBox.setSelectedId(kUserBaseId + i, juce::sendNotification);
+                                         break;
+                                     }
+                            }
+                            else
+                            {
+                                juce::AlertWindow::showMessageBoxAsync(
+                                    juce::AlertWindow::InfoIcon, "Preset Saved",
+                                    "Saved to:\n" + file.getFullPathName()
+                                    + "\n\nNote: Only files in your Presets folder appear in the dropdown:\n"
+                                    + presetsDir.getFullPathName());
+                            }
+
+                        }
+                    }
+                });
         };
 
-    addAndMakeVisible(deletePresetButton);
+
+
+
+    /*addAndMakeVisible(deletePresetButton);*/
     deletePresetButton.setButtonText("Delete");
     deletePresetButton.onClick = [this]
         {
@@ -354,7 +396,7 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
                     }));
         };
 
-    addAndMakeVisible(presetNameEditor);
+    /*addAndMakeVisible(presetNameEditor);*/
     presetNameEditor.setMultiLine(false);
     presetNameEditor.setJustification(juce::Justification::centred);
     presetNameEditor.setTextToShowWhenEmpty("New Preset Name", juce::Colours::grey.withAlpha(0.5f));
@@ -628,20 +670,18 @@ void NaniDistortionAudioProcessorEditor::resized()
         };
 
     // ─── Preset bar (top-left) ───
-    const int presetX = 12;   // left margin (design px)
-    const int presetY = 12;   // top margin  (design px)
-    const int presetH = 22;   // control height
-    const int presetGap = 6;    // gap between controls
-    const int presetNavW = 24;   // ◀ ▶ button width
+    const int presetX = 12;
+    const int presetY = 12;
+    const int presetH = 22;
+    const int presetGap = 6;
+    const int presetNavW = 24;
 
     int cursorX = presetX;
 
     presetComboBox.setBounds(map(cursorX, presetY, 160, presetH)); cursorX += 160 + presetGap;
-    presetNameEditor.setBounds(map(cursorX, presetY, 140, presetH)); cursorX += 140 + presetGap;
-    savePresetButton.setBounds(map(cursorX, presetY, 40, presetH)); cursorX += 40 + presetGap;
-    deletePresetButton.setBounds(map(cursorX, presetY, 40, presetH)); cursorX += 40 + presetGap;
-
-    // Place nav buttons directly AFTER Delete (side by side)
+    // presetNameEditor .setBounds(…);   // removed
+    savePresetButton.setBounds(map(cursorX, presetY, 60, presetH)); cursorX += 60 + presetGap; // wider caption
+    // deletePresetButton.setBounds(…);  // removed
     prevPresetButton.setBounds(map(cursorX, presetY, presetNavW, presetH)); cursorX += presetNavW + presetGap;
     nextPresetButton.setBounds(map(cursorX, presetY, presetNavW, presetH));
 
@@ -974,5 +1014,43 @@ void NaniDistortionAudioProcessorEditor::goToNextPreset()
 
     presetComboBox.setSelectedId(ids[(size_t)idx], juce::sendNotification);
 }
+
+// Select the current preset in the combo box, optionally sending notification
+void NaniDistortionAudioProcessorEditor::selectCurrentPresetInCombo(bool send)
+{
+    auto* pm = processor.getPresetManager();
+    if (!pm) return;
+
+    // Factory has priority if set
+    if (pm->getCurrentFactoryIndex() >= 0)
+    {
+        const int id = 1 + pm->getCurrentFactoryIndex(); // factory IDs are 1..N
+        presetComboBox.setSelectedId(id, send ? juce::sendNotification
+            : juce::dontSendNotification);
+        return;
+    }
+
+    // Otherwise select by matching the current user file
+    const auto current = pm->getCurrentUserFile();
+    if (current.exists())
+    {
+        pm->refreshUserPresetFiles(); // make sure we have an up-to-date list
+        const auto& files = pm->getUserFiles();
+        constexpr int kUserBaseId = 1000; // your existing constant
+
+        for (int i = 0; i < files.size(); ++i)
+            if (files[i] == current)
+            {
+                presetComboBox.setSelectedId(kUserBaseId + i,
+                    send ? juce::sendNotification
+                    : juce::dontSendNotification);
+                return;
+            }
+    }
+
+    // Fallback: nothing selected
+    presetComboBox.setSelectedId(0, juce::dontSendNotification);
+}
+
 
 
