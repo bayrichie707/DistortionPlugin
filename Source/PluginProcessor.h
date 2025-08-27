@@ -3,6 +3,8 @@
 #include <JuceHeader.h>
 // Add these includes at the top of your file if they're not already there
 #include <juce_dsp/juce_dsp.h>
+#include "PresetManager.h"
+
 
 // <<< ADD THESE ENUMS for clarity and type safety
 enum FilterType { LowPass, HighPass, BandPass };
@@ -57,11 +59,17 @@ public:
     // This tells the compiler that our class has a static function with this name.
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
+	// Provide access to the preset manager
+    PresetManager* getPresetManager() const { return presetManager.get(); }
+
 
 
 private:
     // The AudioProcessorValueTreeState must be declared before any parameter pointers
     juce::AudioProcessorValueTreeState treeState;
+
+    // Presets
+    std::unique_ptr<PresetManager> presetManager;
     
     // <<< CHANGE THIS
     // We must use a pointer because the constructor needs parameters

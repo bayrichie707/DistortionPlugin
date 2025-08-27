@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+
+
 NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDistortionAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
@@ -240,27 +242,137 @@ NaniDistortionAudioProcessorEditor::NaniDistortionAudioProcessorEditor(NaniDisto
     distortionTypeComboBox.setVisible(false);
     oversamplingComboBox.setVisible(false);
 
-    // === Preset UI ===
+    //// === OLD Preset UI ===
+    //addAndMakeVisible(presetComboBox);
+    //presetComboBox.setTextWhenNothingSelected("Select Preset");
+    //presetComboBox.onChange = [this] {
+    //    if (presetComboBox.getSelectedItemIndex() >= 0)
+    //        processor.loadPreset(presetComboBox.getText());
+    //    };
+
+    //addAndMakeVisible(savePresetButton);
+    //savePresetButton.setButtonText("Save");
+    //savePresetButton.onClick = [this] { showSavePresetDialog(); };
+
+    //addAndMakeVisible(deletePresetButton);
+    //deletePresetButton.setButtonText("Delete");
+    //deletePresetButton.onClick = [this] { showDeletePresetConfirmation(); };
+
+    //addAndMakeVisible(presetNameEditor);
+    //presetNameEditor.setMultiLine(false);
+    //presetNameEditor.setJustification(juce::Justification::centred);
+    //presetNameEditor.setTextToShowWhenEmpty("New Preset Name", juce::Colours::grey.withAlpha(0.5f));
+    //updatePresetComboBox();
+
+    // === Preset UI (PresetManager-driven) ===
     addAndMakeVisible(presetComboBox);
     presetComboBox.setTextWhenNothingSelected("Select Preset");
-    presetComboBox.onChange = [this] {
-        if (presetComboBox.getSelectedItemIndex() >= 0)
-            processor.loadPreset(presetComboBox.getText());
+
+    //// map: factory items => IDs 1..N, user items => 1000+index
+    //constexpr int kUserBaseId = 1000;
+
+    presetComboBox.onChange = [this]
+        {
+            auto* pm = processor.getPresetManager();
+            if (!pm) return;
+
+            const int selId = presetComboBox.getSelectedId();
+            if (selId <= 0) return;
+
+            if (selId >= kUserBaseId)
+            {
+                const int userIdx = selId - kUserBaseId;
+                const auto& files = pm->getUserFiles();
+                if (juce::isPositiveAndBelow(userIdx, files.size()))
+                    pm->loadUserPreset(files[userIdx]);
+            }
+            else
+            {
+                const int factoryIdx = selId - 1; // 1-based -> 0-based
+                pm->applyFactoryPreset(factoryIdx);
+            }
         };
 
     addAndMakeVisible(savePresetButton);
     savePresetButton.setButtonText("Save");
-    savePresetButton.onClick = [this] { showSavePresetDialog(); };
+    savePresetButton.onClick = [this]
+        {
+            auto* pm = processor.getPresetManager();
+            if (!pm) return;
+
+            auto name = presetNameEditor.getText().trim();
+            if (name.isEmpty())
+            {
+                juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                    "Save Preset", "Please enter a preset name.");
+                return;
+            }
+
+            if (pm->saveUserPreset(name))
+            {
+                pm->refreshUserPresetFiles();
+                updatePresetComboBox();   // rebuild list
+                presetNameEditor.clear(); // clear field
+            }
+        };
 
     addAndMakeVisible(deletePresetButton);
     deletePresetButton.setButtonText("Delete");
-    deletePresetButton.onClick = [this] { showDeletePresetConfirmation(); };
+    deletePresetButton.onClick = [this]
+        {
+            auto* pm = processor.getPresetManager();
+            if (!pm) return;
+
+            const int selId = presetComboBox.getSelectedId();
+            if (selId < kUserBaseId)
+            {
+                juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                    "Delete Preset",
+                    "Factory presets can’t be deleted.");
+                return;
+            }
+
+            const int userIdx = selId - kUserBaseId;
+            const auto& files = pm->getUserFiles();
+            if (!juce::isPositiveAndBelow(userIdx, files.size()))
+                return;
+
+            auto file = files[userIdx];
+            juce::AlertWindow::showOkCancelBox(juce::AlertWindow::WarningIcon,
+                "Delete Preset",
+                "Delete \"" + file.getFileNameWithoutExtension() + "\"?",
+                "Delete", "Cancel",
+                this,
+                juce::ModalCallbackFunction::create([this, pm, file](int r)
+                    {
+                        if (r != 0 && pm->deleteUserPreset(file))
+                        {
+                            const bool wasSelected = true;
+                            pm->refreshUserPresetFiles();
+                            updatePresetComboBox();
+                        }
+                    }));
+        };
 
     addAndMakeVisible(presetNameEditor);
     presetNameEditor.setMultiLine(false);
     presetNameEditor.setJustification(juce::Justification::centred);
     presetNameEditor.setTextToShowWhenEmpty("New Preset Name", juce::Colours::grey.withAlpha(0.5f));
+
+    // Build the initial list (factory + user)
     updatePresetComboBox();
+
+    // Preset nav buttons
+    addAndMakeVisible(prevPresetButton);
+    addAndMakeVisible(nextPresetButton);
+
+    prevPresetButton.setTooltip("Previous preset");
+    nextPresetButton.setTooltip("Next preset");
+
+    // Navigate by changing the ComboBox selection (which triggers your onChange)
+    prevPresetButton.onClick = [this] { goToPrevPreset(); };
+    nextPresetButton.onClick = [this] { goToNextPreset(); };
+
 
     // === Level Meters ===
     addAndMakeVisible(inputMeterLabel);
@@ -516,18 +628,23 @@ void NaniDistortionAudioProcessorEditor::resized()
         };
 
     // ─── Preset bar (top-left) ───
-    // Use unique names so we don't shadow the inner-area x/y/w/h above.
-    const int presetX = 12;   // left margin in design px
-    const int presetY = 12;   // top margin in design px
+    const int presetX = 12;   // left margin (design px)
+    const int presetY = 12;   // top margin  (design px)
     const int presetH = 22;   // control height
-    const int presetGap = 6;  // gap between controls
+    const int presetGap = 6;    // gap between controls
+    const int presetNavW = 24;   // ◀ ▶ button width
 
     int cursorX = presetX;
 
     presetComboBox.setBounds(map(cursorX, presetY, 160, presetH)); cursorX += 160 + presetGap;
     presetNameEditor.setBounds(map(cursorX, presetY, 140, presetH)); cursorX += 140 + presetGap;
     savePresetButton.setBounds(map(cursorX, presetY, 40, presetH)); cursorX += 40 + presetGap;
-    deletePresetButton.setBounds(map(cursorX, presetY, 40, presetH));
+    deletePresetButton.setBounds(map(cursorX, presetY, 40, presetH)); cursorX += 40 + presetGap;
+
+    // Place nav buttons directly AFTER Delete (side by side)
+    prevPresetButton.setBounds(map(cursorX, presetY, presetNavW, presetH)); cursorX += presetNavW + presetGap;
+    nextPresetButton.setBounds(map(cursorX, presetY, presetNavW, presetH));
+
 
     const int k = 43; // knob size in the design
   
@@ -585,24 +702,75 @@ void NaniDistortionAudioProcessorEditor::resized()
 
 
 
+//void NaniDistortionAudioProcessorEditor::updatePresetComboBox()
+//{
+//    // Clear the combo box
+//    presetComboBox.clear();
+//
+//    // Get the preset list from the processor
+//    juce::StringArray presetList = processor.getPresetList();
+//
+//    // Add the presets to the combo box
+//    presetComboBox.addItemList(presetList, 1);
+//
+//    // Select the current preset if there is one
+//    juce::String currentPreset = processor.getCurrentPresetName();
+//    if (currentPreset.isNotEmpty())
+//    {
+//        presetComboBox.setText(currentPreset, juce::dontSendNotification);
+//    }
+//}
+
 void NaniDistortionAudioProcessorEditor::updatePresetComboBox()
 {
-    // Clear the combo box
+    auto* pm = processor.getPresetManager();
+    if (!pm) return;
+
     presetComboBox.clear();
+    int itemId = 1;
 
-    // Get the preset list from the processor
-    juce::StringArray presetList = processor.getPresetList();
+    // Factory presets
+    const auto& factory = pm->getFactoryNames();
+    for (auto name : factory)
+        presetComboBox.addItem(name, itemId++);
 
-    // Add the presets to the combo box
-    presetComboBox.addItemList(presetList, 1);
+    const int factoryCount = factory.size();
+    const int firstUserId = 1000; // must match kUserBaseId above
 
-    // Select the current preset if there is one
-    juce::String currentPreset = processor.getCurrentPresetName();
-    if (currentPreset.isNotEmpty())
+    if (factoryCount > 0)
+        presetComboBox.addSeparator();
+
+    // User presets
+    pm->refreshUserPresetFiles();
+    const auto& files = pm->getUserFiles();
+    for (int i = 0; i < files.size(); ++i)
+        presetComboBox.addItem(files[i].getFileNameWithoutExtension(),
+            firstUserId + i);
+
+    // Select the current preset (factory takes precedence)
+    if (pm->getCurrentFactoryIndex() >= 0)
     {
-        presetComboBox.setText(currentPreset, juce::dontSendNotification);
+        presetComboBox.setSelectedId(1 + pm->getCurrentFactoryIndex(), juce::dontSendNotification);
+    }
+    else
+    {
+        auto current = pm->getCurrentUserFile();
+        if (current.exists())
+        {
+            for (int i = 0; i < files.size(); ++i)
+                if (files[i] == current)
+                {
+                    presetComboBox.setSelectedId(firstUserId + i, juce::dontSendNotification);
+                    break;
+                }
+        }
+        else
+        {
+            presetComboBox.setTextWhenNothingSelected("Select Preset");
+        }
     }
 }
+
 
 void NaniDistortionAudioProcessorEditor::showSavePresetDialog()
 {
@@ -759,4 +927,52 @@ int NaniDistortionAudioProcessorEditor::getSpriteFramesFor(const juce::Slider& s
 
     return spriteDefault.isValid() ? spriteDefaultFrames : 64; // sensible fallback
 }
+
+std::vector<int> NaniDistortionAudioProcessorEditor::buildPresetItemIdList() const
+{
+    // Build a flat list of item IDs excluding separators (ID == 0)
+    std::vector<int> ids;
+    const int n = presetComboBox.getNumItems();
+    ids.reserve(n);
+    for (int i = 0; i < n; ++i)
+    {
+        const int id = presetComboBox.getItemId(i);
+        if (id > 0) ids.push_back(id);
+    }
+    return ids;
+}
+
+void NaniDistortionAudioProcessorEditor::goToPrevPreset()
+{
+    auto ids = buildPresetItemIdList();
+    if (ids.empty()) return;
+
+    const int selId = presetComboBox.getSelectedId();
+    // find current index in the flat id list
+    int idx = -1;
+    for (int i = 0; i < (int)ids.size(); ++i) if (ids[i] == selId) { idx = i; break; }
+    if (idx < 0) idx = 0; // if nothing selected, pick first
+
+    // wrap-around
+    idx = (idx - 1 + (int)ids.size()) % (int)ids.size();
+
+    // Change selection (triggers onChange → PresetManager load)
+    presetComboBox.setSelectedId(ids[(size_t)idx], juce::sendNotification);
+}
+
+void NaniDistortionAudioProcessorEditor::goToNextPreset()
+{
+    auto ids = buildPresetItemIdList();
+    if (ids.empty()) return;
+
+    const int selId = presetComboBox.getSelectedId();
+    int idx = -1;
+    for (int i = 0; i < (int)ids.size(); ++i) if (ids[i] == selId) { idx = i; break; }
+    if (idx < 0) idx = 0;
+
+    idx = (idx + 1) % (int)ids.size();
+
+    presetComboBox.setSelectedId(ids[(size_t)idx], juce::sendNotification);
+}
+
 

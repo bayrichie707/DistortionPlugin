@@ -5,6 +5,8 @@
 #include "LevelMeter.h"
 #include "CustomSlider.h"
 
+inline constexpr int kUserBaseId = 1000;  // visible in all TUs that include this header
+
 // --- 2-frame filmstrip LED (frame 0 = OFF, frame 1 = ON) ---
 class FilmstripLED : public juce::Component
 {
@@ -120,6 +122,8 @@ public:
     int         getSpriteFramesFor(const juce::Slider& s) const;
 
 
+
+
 private:
     NaniDistortionAudioProcessor& processor;
 
@@ -204,6 +208,15 @@ private:
     void updatePresetComboBox();
     void showSavePresetDialog();
     void showDeletePresetConfirmation();
+
+    // Preset navigation
+    juce::TextButton prevPresetButton{ "<" };
+    juce::TextButton nextPresetButton{ ">" };
+
+    // Helpers (declare in the class; implement in .cpp)
+    void goToPrevPreset();
+    void goToNextPreset();
+    std::vector<int> buildPresetItemIdList() const; // IDs excluding separators
 
     // Limiter components
     //juce::Slider limiterThresholdSlider;

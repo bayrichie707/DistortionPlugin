@@ -8,6 +8,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout NaniDistortionAudioProcessor
 
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
+
+
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{ "drive", 1 },
         "Drive",
@@ -157,6 +159,8 @@ NaniDistortionAudioProcessor::NaniDistortionAudioProcessor()
       treeState(*this, nullptr, "PARAMETERS", NaniDistortionAudioProcessor::createParameterLayout())
 #endif
 {
+    // Instantiate your preset manager with the APVTS in this project (treeState)
+    presetManager = std::make_unique<PresetManager>(treeState, "Swordfish Audio", "KamelKrusher");
 }
 
 NaniDistortionAudioProcessor::~NaniDistortionAudioProcessor() {}
